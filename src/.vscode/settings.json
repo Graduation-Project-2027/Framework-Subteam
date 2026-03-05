@@ -1,0 +1,13 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/ziad/Week-5-6-Gazebo-sensors/install/mogi_trajectory_server/lib/python3.12/site-packages",
+        "/home/ziad/Week-5-6-Gazebo-sensors/install/bme_gazebo_sensors_py/lib/python3.12/site-packages",
+        "/opt/ros/jazzy/lib/python3.12/site-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/ziad/Week-5-6-Gazebo-sensors/install/mogi_trajectory_server/lib/python3.12/site-packages",
+        "/home/ziad/Week-5-6-Gazebo-sensors/install/bme_gazebo_sensors_py/lib/python3.12/site-packages",
+        "/opt/ros/jazzy/lib/python3.12/site-packages"
+    ],
+    "github.copilot.chat.codeGeneration.useInstructionFiles": true
+}

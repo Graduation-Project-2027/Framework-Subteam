@@ -1,0 +1,33 @@
+<launch>
+    <let name="urdf_path" 
+         value="$(find-pkg-share youssef_adel__robot_description)/urdf/youssef_adel_robot.urdf" />
+
+    <let name="robot_description" 
+         value="$(command 'xacro $(var urdf_path)')" />
+
+    <node pkg="robot_state_publisher" exec="robot_state_publisher">
+        <param name="robot_description" value="$(var robot_description)" />
+        <param name="use_sim_time" value="true" />
+    </node>
+
+    <arg name="world_path" default="$(find-pkg-share youssef_adel__robot_bringup)/worlds/test_world.sdf"/>
+    
+    <include file="$(find-pkg-share ros_gz_sim)/launch/gz_sim.launch.py">
+        <arg name="gz_args" value="-r $(var world_path)"/>
+    </include>
+
+    <node pkg="ros_gz_sim" exec="create" args="-topic robot_description -name youssef_adel_robot -x -2.350 -z 0.3">
+    </node>
+
+    <node pkg="ekf_pred_update" exec="ekf_pred_update" name="ekf_pred_update" output="screen"> 
+    </node>
+
+    <let name="gazebo_config_path" 
+         value="$(find-pkg-share youssef_adel__robot_bringup)/config/gazebo_bridge.yaml" />
+    <node pkg="ros_gz_bridge" exec="parameter_bridge" args="--ros-args -p config_file:=$(var gazebo_config_path)">
+    </node>
+
+    <node pkg="rviz2" exec="rviz2" args="-d $(find-pkg-share youssef_adel__robot_description)/rviz/urdf_config.rviz">
+        <param name="use_sim_time" value="true" />
+    </node>
+</launch>
