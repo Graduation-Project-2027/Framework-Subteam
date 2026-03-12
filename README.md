@@ -16,7 +16,7 @@ It manages the robot's physical description, simulation environment, and the com
 | :--- | :--- |
 | **mecanum_robot_description** | Contains URDF/Xacro files, STL meshes, and RViz configurations. |
 | **mecanum_robot_bringup** | Contains launch scripts, Gazebo world files (`.sdf`), and bridge parameters. |
-| **old_ws** | Contains TODO_mobile_navigation. |
+| **mecanum_robot_navigation** | Contains  mobile navigation pkg. |
 
 ---
 
