@@ -16,7 +16,7 @@ It manages the robot's physical description, simulation environment, and the com
 | :--- | :--- |
 | **mecanum_robot_description** | Contains URDF/Xacro files, STL meshes, and RViz configurations. |
 | **mecanum_robot_bringup** | Contains launch scripts, Gazebo world files (`.sdf`), and bridge parameters. |
-| **mecanum_robot_navigation** | Contains  mobile navigation pkg. |
+| **mecanum_robot_navigation** | Contains the core navigation stack. |
 
 ---
 
@@ -58,6 +58,18 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 * **u / o** : Lateral Strafe (Left / Right)
 * **k** : Stop
 
+### 4. Launch Navigation
+This command launches Gazebo, spawns the robot at the designated coordinates.
+```bash
+ros2 run launch mecanum_robot_navigation spawn_robot.launch.py
+
+```
+
+This command launches Rviz, and Navigation Stack.
+```bash
+ros2 run launch mecanum_robot_navigation navigation.launch.py
+
+```
 ---
 
 ## 📡 Sensor Integration
@@ -68,5 +80,5 @@ The framework is pre-configured to bridge the following data:
 * **IMU**: `/imu` (Sensor to ROS)
 * **Odometry**: `/odom` (Bidirectional)
 * **Velocity**: `/cmd_vel` (ROS to Gazebo)
-
+* **Lifting**: `/cmd_pos` (ROS to Gazebo)
 ---
