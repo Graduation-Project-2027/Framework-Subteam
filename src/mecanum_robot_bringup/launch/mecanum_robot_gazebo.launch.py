@@ -73,7 +73,7 @@ def generate_launch_description():
         arguments=[
             "-name", "my_robot",
             "-topic", "robot_description",
-            "-x", "2.5", "-y", "2.0", "-z", "0.01", "-Y", "-1.56"  # Initial spawn position
+            "-x", "0", "-y", "3.5", "-z", "0.01"  # Initial spawn position
         ],
         output="screen",
         parameters=[
@@ -101,6 +101,7 @@ def generate_launch_description():
         package="ros_gz_bridge",
         executable="parameter_bridge",
         arguments=[
+            "/lift_joint/cmd_pos@std_msgs/msg/Float64]gz.msgs.Double",
             "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
             "/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist",
             "/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry",

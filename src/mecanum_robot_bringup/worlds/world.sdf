@@ -12,7 +12,7 @@
     <plugin name='gz::sim::systems::Sensors' filename='gz-sim-sensors-system'>
       <render_engine>ogre2</render_engine>
     </plugin>
-    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin name='gz::sim::systems::Imu' filename='gz-sim-imu-system'/>
     <gravity>0 0 -9.8000000000000007</gravity>
     <magnetic_field>5.5644999999999998e-06 2.2875799999999999e-05 -4.2388400000000002e-05</magnetic_field>
     <atmosphere type='adiabatic'/>
@@ -70,41 +70,557 @@
       <pose>0 0 0 0 0 0</pose>
       <self_collide>false</self_collide>
     </model>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bookshelf/4</uri>
-      <name>Bookshelf</name>
-      <pose>3.2638811179044733 0.16394691703293152 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bookshelf/4</uri>
-      <name>Bookshelf_1</name>
-      <pose>3.2491236377881405 -0.90643196011919325 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bookshelf/4</uri>
-      <name>Bookshelf_2</name>
-      <pose>3.2403341299193391 1.2474835046256376 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bookshelf/4</uri>
-      <name>Bookshelf_1_1</name>
-      <pose>0.6764512494543653 -0.86478217859940276 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bookshelf/4</uri>
-      <name>Bookshelf_1_3</name>
-      <pose>0.67758179938257213 1.0866058509065657 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/table/4</uri>
-      <name>Table</name>
-      <pose>2.1145850178110113 -4.9590508118683889 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/youssef-adel/.gz/fuel/fuel.gazebosim.org/openrobotics/models/office chair/1</uri>
-      <name>OfficeChair</name>
-      <pose>2.2717183733834521 -5.6212505502130323 0 0 0 0</pose>
-    </include>
+    <model name='nist_maze_wall_120'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>5.4210100000000002e-21 0 0.20000000000000001 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_0'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>1.2 0 0.20000000000000001 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_1'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.2000000000000002 0 0.20000000000000001 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_2'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>1.11022e-16 1 0.20000000000000001 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_3'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.2000000000000002 1 0.20000000000000001 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_4'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.7999900000000002 1.7870200000000001 0.20000000000000001 1.5700700000004861 1.5700000000012424 1.1153442535623072e-12</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_5'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.7999999999999998 2.90056 0.20000000000000001 1.5700000000012402 1.5700000000012424 1.8821434285462104e-12</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_6'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.7999999999999998 4 0.20000000000000001 1.5700000000012402 1.5700000000012424 1.8821434285462104e-12</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_7'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>-0.601518 2.8035100000000002 0.19991900000000001 1.5700000000010661 1.5700000000009635 7.3980296375679355e-08</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='shelving_unit_warehouse'>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+            </mesh>
+          </geometry>
+        </collision>
+        <pose>0 0 0 0 0 0</pose>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.4427199363708496 3.0306646823883061 0.1991792619228363 1.5700000841906603 6.234599373012558e-36 2.2074401284053133e-35</pose>
+      <static>false</static>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='shelving_unit_warehouse_0'>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+            </mesh>
+          </geometry>
+        </collision>
+        <pose>0 0 0 0 0 0</pose>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>0.70876777172088623 1.9998400211334231 0.19999800622463226 1.5707999672671697 7.184099832780413e-20 2.2978398275134693e-20</pose>
+      <static>false</static>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_8'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>-0.59999999999999998 1.8 0.20000000000000001 1.569999999999881 1.5700000000005452 -1.39418031597669e-13</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_9'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>2.2000000000000002 3.3914499999999999 0.200323 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_10'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>1.0459099999999999 3.3914499999999999 0.20077600000000001 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <model name='nist_maze_wall_120_11'>
+      <static>true</static>
+      <link name='nist_maze_wall_120_link'>
+        <pose>0 0 0 0 0 0</pose>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/nist maze wall 120/3/files/meshes/nist_maze_wall_120.dae</uri>
+              <scale>1 1 1</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>-0.035773899999999997 3.3921399999999999 0.20013 0 1.5700000000008241 0</pose>
+      <self_collide>false</self_collide>
+    </model>
     <light name='sun' type='directional'>
       <pose>0 0 10 0 0 0</pose>
       <cast_shadows>true</cast_shadows>
@@ -114,9 +630,9 @@
       <specular>0.200000003 0.200000003 0.200000003 1</specular>
       <attenuation>
         <range>1000</range>
-        <linear>0.01</linear>
-        <constant>0.90000000000000002</constant>
-        <quadratic>0.001</quadratic>
+        <linear>0.0099999997764825821</linear>
+        <constant>0.89999997615814209</constant>
+        <quadratic>0.0010000000474974513</quadratic>
       </attenuation>
       <spot>
         <inner_angle>0</inner_angle>

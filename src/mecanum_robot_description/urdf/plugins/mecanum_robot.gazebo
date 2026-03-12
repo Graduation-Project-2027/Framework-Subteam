@@ -49,6 +49,7 @@
         <joint_name>front_right_wheel_joint</joint_name>
         <joint_name>back_left_wheel_joint</joint_name>
         <joint_name>back_right_wheel_joint</joint_name>
+        <joint_name>lift_joint</joint_name>
     </plugin>
   </gazebo>
 
@@ -82,6 +83,20 @@
       <visualize>true</visualize>
       <topic>camera/image</topic>
     </sensor>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+        <joint_name>lift_joint</joint_name>
+        <p_gain>10000</p_gain>
+        <i_gain>0.1</i_gain>
+        <d_gain>100</d_gain>
+        <i_max>1</i_max>
+        <i_min>-1</i_min>
+        <cmd_max>1000</cmd_max>
+        <cmd_min>-1000</cmd_min>
+        <topic>lift_joint/cmd_pos</topic>
+    </plugin>
   </gazebo>
   <!-- 2.5.1 End -->
 </robot>

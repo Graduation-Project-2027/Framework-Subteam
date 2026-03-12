@@ -12,10 +12,14 @@
     <xacro:include filename="$(find mecanum_robot_description)/urdf/urdf/lidar.urdf.xacro"/>
     <xacro:include filename="$(find mecanum_robot_description)/urdf/urdf/imu.urdf.xacro"/>
     <xacro:include filename="$(find mecanum_robot_description)/urdf/urdf/materials.xacro"/> 
+    <xacro:include filename="$(find mecanum_robot_description)/urdf/urdf/lift.urdf.xacro"/>
     <xacro:include filename="$(find mecanum_robot_description)/urdf/plugins/mecanum_robot.gazebo"/>
 
     <!-- base -->
     <xacro:base prefix="$(arg prefix)"/>
+
+    <!-- lift -->
+    <xacro:lift_mechanism prefix="$(arg prefix)" parent_link="base_link" />
 
     <!-- front_left -->
     <xacro:mecanum_wheel
