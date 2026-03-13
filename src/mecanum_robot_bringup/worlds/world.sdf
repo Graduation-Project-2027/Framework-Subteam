@@ -408,14 +408,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+              <uri>shelving_unit_warehouse.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+              <uri>shelving_unit_warehouse.obj</uri>
             </mesh>
           </geometry>
         </collision>
@@ -443,14 +443,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+              <uri>shelving_unit_warehouse.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>file:///home/youssef-adel/gp25_ws/src/mecanum_robot_bringup/worlds/shelving_unit_warehouse.obj</uri>
+              <uri>shelving_unit_warehouse.obj</uri>
             </mesh>
           </geometry>
         </collision>
