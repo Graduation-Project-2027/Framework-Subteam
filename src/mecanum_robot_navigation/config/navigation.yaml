@@ -45,7 +45,7 @@ controller_server:
       movement_time_allowance: 10.0
     # Goal checker parameters
     general_goal_checker:
-      stateful: True
+      stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.20
@@ -143,8 +143,8 @@ controller_server:
       GoalAngleCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.0
-        threshold_to_consider: 0.35
+        cost_weight: 5.0
+        threshold_to_consider: 1.4
       PreferForwardCritic:
         enabled: true
         cost_power: 1
@@ -185,7 +185,7 @@ controller_server:
       TwirlingCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 10.0
+        cost_weight: 2.0
       # TwirlingCritic:
       #   enabled: true
       #   twirling_cost_power: 1
@@ -202,12 +202,13 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      footprint: "[[0.35, 0.26], [0.35, -0.26], [-0.35, -0.26], [-0.35, 0.26]]"
+      footprint: "[[0.35, 0.32], [0.35, -0.32], [-0.35, -0.32], [-0.35, 0.32]]"
+      footprint_padding: 0.03
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.25 #0.70
+        cost_scaling_factor: 2.5
+        inflation_radius: 0.35
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -240,7 +241,8 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint
-      footprint: "[[0.35, 0.26], [0.35, -0.26], [-0.35, -0.26], [-0.35, 0.26]]"
+      footprint: "[[0.35, 0.32], [0.35, -0.32], [-0.35, -0.32], [-0.35, 0.32]]"
+      footprint_padding: 0.03
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -263,8 +265,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.25 #0.70
+        cost_scaling_factor: 2.5
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 
