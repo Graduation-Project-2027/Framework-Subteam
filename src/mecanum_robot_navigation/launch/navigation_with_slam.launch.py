@@ -31,9 +31,9 @@ def generate_launch_description():
 
     # Generate path to config file
     interactive_marker_config_file_path = os.path.join(
-        get_package_share_directory('interactive_marker_twist_server'),
+        get_package_share_directory('mecanum_robot_navigation'),
         'config',
-        'linear.yaml'
+        'interactive_marker_planar.yaml'
     )
 
     nav2_navigation_launch_path = os.path.join(

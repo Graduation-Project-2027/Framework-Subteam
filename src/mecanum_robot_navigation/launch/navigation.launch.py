@@ -26,6 +26,12 @@ def generate_launch_description():
         description='Flag to enable use_sim_time'
     )
 
+    interactive_marker_config_file_path = os.path.join(
+        get_package_share_directory('mecanum_robot_navigation'),
+        'config',
+        'interactive_marker_planar.yaml'
+    )
+
     # Path to the Slam Toolbox launch file
     nav2_localization_launch_path = os.path.join(
         get_package_share_directory('nav2_bringup'),
@@ -68,6 +74,14 @@ def generate_launch_description():
         ]
     )
 
+    interactive_marker_twist_server_node = Node(
+        package='interactive_marker_twist_server',
+        executable='marker_server',
+        name='twist_server_node',
+        parameters=[interactive_marker_config_file_path],
+        output='screen',
+    )
+
     localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(nav2_localization_launch_path),
         launch_arguments={
@@ -91,6 +105,7 @@ def generate_launch_description():
     launchDescriptionObject.add_action(rviz_config_arg)
     launchDescriptionObject.add_action(sim_time_arg)
     launchDescriptionObject.add_action(rviz_node)
+    launchDescriptionObject.add_action(interactive_marker_twist_server_node)
     launchDescriptionObject.add_action(localization_launch)
     launchDescriptionObject.add_action(navigation_launch)
 
