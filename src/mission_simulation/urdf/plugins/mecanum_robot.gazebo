@@ -13,25 +13,21 @@
       <wheel_separation>0.526</wheel_separation>
       <wheelbase>0.568</wheelbase>
       <wheel_radius>0.06095</wheel_radius>
-      <min_acceleration>-5</min_acceleration>
-      <max_acceleration>5</max_acceleration>
       <odom_topic>odom</odom_topic>
       <tf_topic>tf</tf_topic>
-      <frame_id>odom</frame_id>
-      <child_frame_id>base_footprint</child_frame_id>
-      <odom_publish_frequency>30</odom_publish_frequency>
+      <publish_odom>false</publish_odom>    
+      <publish_odom_tf>false</publish_odom_tf> 
     </plugin>
 
-    <!-- Odometry publisher plugin -->
-    <plugin name="gz::sim::systems::OdometryPublisher" filename="gz-sim-odometry-publisher-system">
+    <!-- Odometry Publisher Plugin -->
+    <plugin 
+      filename="gz-sim-odometry-publisher-system"
+      name="gz::sim::systems::OdometryPublisher">
       <odom_topic>odom</odom_topic>
       <odom_frame>odom</odom_frame>
       <robot_base_frame>base_footprint</robot_base_frame>
-      <publish_tf>true</publish_tf>
-      <tf_topic>tf</tf_topic>
+      <publish_tf>true</publish_tf> <tf_topic>tf</tf_topic>
       <odom_publish_frequency>30</odom_publish_frequency>
-      <xyz_offset>0 0 0</xyz_offset>
-      <rpy_offset>0 0 0</rpy_offset>
     </plugin>
 
     <!-- Joint state publisher plugin -->
