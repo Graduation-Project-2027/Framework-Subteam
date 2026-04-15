@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:property name="lift_mass" value="5.0" />
+  <xacro:property name="lift_range" value="0.5" /> 
+
+  <xacro:macro name="lift_mechanism" params="prefix parent_link">
+
+    <link name="${prefix}lift_link">
+      <visual>
+        <origin xyz="0 -0.25 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find mission_simulation)/meshes/robot_3d/visual/lifting_mechanism.stl"/>
+        </geometry>
+        <material name="silver">
+          <color rgba="0.75 0.75 0.75 1"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 -0.25 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="file://$(find mission_simulation)/meshes/robot_3d/visual/lifting_mechanism.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="${lift_mass}"/>
+        <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.05"/>
+      </inertial>
+    </link>
+
+
+    <joint name="${prefix}lift_joint" type="prismatic">
+      <parent link="${parent_link}"/>
+      <child link="${prefix}lift_link"/>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/> 
+      <axis xyz="0 0 1"/>
+      <limit lower="0" upper="${lift_range}" effort="200" velocity="0.2"/>
+      <dynamics damping="15.0" friction="2.0"/>
+    </joint>
+
+
+    <transmission name="${prefix}lift_trans">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="${prefix}lift_joint">
+        <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="${prefix}lift_motor">
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
+
+    <gazebo reference="${prefix}lift_link">
+      <material>Gazebo/Grey</material>
+    </gazebo>
+
+  </xacro:macro>
+</robot>

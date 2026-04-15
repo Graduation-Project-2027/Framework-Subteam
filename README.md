@@ -1,84 +1,77 @@
-# Framework-Subsystem: Mecanum Mobile Manipulator
+# 2027 Autonomous Mobile Manipulator Graduation Project
 
-This subsystem serves as the core integration layer for the **GP25 Graduation Project**. 
-It manages the robot's physical description, simulation environment, and the communication bridge between ROS 2 and Gazebo.
+**Author:** Youssef Adel Wahba Boutros  
+**GitHub:** [youssefadell11](https://github.com/youssefadell11)  
 
-## 🛠️ System Overview
-* **Robot Name**: Mecanum Mobile Manipulator
-* **OS**: Ubuntu 24.04 (Noble) 
-* **ROS 2 Version**: Jazzy Jalisco
-* **Simulator**: Gazebo Sim (Harmonic)
+## Project Overview
+This repository contains the complete ROS 2 workspace for an autonomous mobile manipulator. The system is designed to navigate complex environments (like warehouse mazes) using Nav2, dynamically avoid obstacles, precisely position itself at target stations, and operate a closed-loop lift mechanism to pick up and drop off payloads.
 
----
-
-## 📂 Project Structure
-| Package | Description |
-| :--- | :--- |
-| **mecanum_robot_description** | Contains URDF/Xacro files, STL meshes, and RViz configurations. |
-| **mecanum_robot_bringup** | Contains launch scripts, Gazebo world files (`.sdf`), and bridge parameters. |
-| **mecanum_robot_navigation** | Contains the core navigation stack. |
+The robot's "brain" is powered by a robust C++ `BehaviorTree.CPP` (v4) architecture, ensuring safe, sequential execution of tasks, including real-time emergency stop (E-Stop) interrupts and physics-aware safety interlocks.
 
 ---
 
-## 🚀 Getting Started
+## Workspace Architecture
 
-### 1. Installation & Build
-Ensure you are in your workspace root and have sourced the ROS 2 environment.
+The workspace is heavily modularized into 7 distinct ROS 2 packages:
+
+1. **`mission_bringup`**: The master conductor. Contains the primary launch files to boot the simulation, navigation stack, and control nodes simultaneously.
+2. **`mission_manager`**: The core C++ Behavior Tree execution engine (Lifecycle Node).
+3. **`mission_navigation`**: The Nav2 configurations, parameter tunings, and static 2D maps.
+4. **`mission_simulation`**: The digital twin. Contains the robot's URDF, Gazebo world files, and ROS-Gazebo bridge configurations.
+5. **`lift_control`**: A Python-based Action Server that translates BT commands into physical joint movements, tracking real-time odometry and Gazebo joint states for safety.
+6. **`mission_gui`**: A lightweight Python operator interface for dispatching high-level mission commands.
+7. **`custom_interfaces`**: The custom `.msg` and `.action` definitions that unify communication across the system.
+
+---
+
+## 🛠️ Build Instructions
+
+Ensure you have ROS 2 and Gazebo (Ignition) installed. Open a fresh terminal and run:
 
 ```bash
-# Build the workspace
-cd ~/gp_ws
-colcon build 
+cd ~/graduation_ws
+# Build the entire workspace
+colcon build
+
+# Source the newly built workspace
+source install/setup.bash
+```
+
+## 🚀 Execution Guide
+To run a complete mission, you will need three separate terminals.
+
+### Terminal 1: Boot the System
+This command launches Gazebo, RViz2, the robot state publishers, the Nav2 stack, the lift controller, and loads the Behavior Tree node (in an unconfigured state).
+
+```bash
+cd ~/graduation_ws
+source install/setup.bash
+ros2 launch mission_bringup system_bringup.launch.py
+```
+### Terminal 2: Activate the Brain (Lifecycle Management)
+Because the **'mission_manager'** is a ROS 2 Lifecycle Node, it boots up safely in an "Unconfigured" state. You must manually configure and activate it to wake up the Behavior Tree.
+
+```bash
+cd ~/graduation_ws
 source install/setup.bash
 
+# 1. Load the XML trees and connect to the Action Servers
+ros2 lifecycle set /mission_manager_node configure
+
+# 2. Activate the node to begin listening for GUI commands
+ros2 lifecycle set /mission_manager_node activate
 ```
 
-### 2. Launch Simulation
-
-This command launches Gazebo, spawns the robot at the designated coordinates, and starts RViz.
+### Terminal 3: Run the GUI
+With the simulation running and the brain activated, open the operator interface to send your robot to work.
 
 ```bash
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py
-
+cd ~/graduation_ws
+source install/setup.bash
+ros2 run mission_gui gui_command_node
 ```
 
-### 3. Teleop Control
+**Note:** Available Commands:
 
-To drive the robot manually using your keyboard, open a new terminal and run:
+Type **'A'** or **'B'** to send the robot to a pick-up station. The robot will autonomously drive to the location, lift the payload, navigate to the EXIT **'(Y)'**, drop the payload, and return HOME **'(X)'**.
 
-```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
-
-```
-
-**Controls:**
-
-* **i / ,** : Forward / Backward
-* **j / l** : Rotation (Yaw)
-* **u / o** : Lateral Strafe (Left / Right)
-* **k** : Stop
-
-### 4. Launch Navigation
-This command launches Gazebo, spawns the robot at the designated coordinates.
-```bash
-ros2 run launch mecanum_robot_navigation spawn_robot.launch.py
-
-```
-
-This command launches Rviz, and Navigation Stack.
-```bash
-ros2 run launch mecanum_robot_navigation navigation.launch.py
-
-```
----
-
-## 📡 Sensor Integration
-
-The framework is pre-configured to bridge the following data:
-
-* **Lidar**: `/scan` (Sensor to ROS)
-* **IMU**: `/imu` (Sensor to ROS)
-* **Odometry**: `/odom` (Bidirectional)
-* **Velocity**: `/cmd_vel` (ROS to Gazebo)
-* **Lifting**: `/cmd_pos` (ROS to Gazebo)
----

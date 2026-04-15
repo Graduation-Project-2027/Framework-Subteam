@@ -1,0 +1,8 @@
+# Goal
+float64 target_height
+---
+# Result
+bool success
+---
+# Feedback
+float64 current_height
