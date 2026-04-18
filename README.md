@@ -1,84 +1,76 @@
-# Framework-Subsystem: Mecanum Mobile Manipulator
+# Framework-Subteam: Mecanum Mobile Manipulator
 
-This subsystem serves as the core integration layer for the **GP25 Graduation Project**. 
-It manages the robot's physical description, simulation environment, and the communication bridge between ROS 2 and Gazebo.
+This repository contains the simulation, robot description, bringup, and navigation stack for the graduation project mecanum mobile manipulator.
 
-## 🛠️ System Overview
-* **Robot Name**: Mecanum Mobile Manipulator
-* **OS**: Ubuntu 24.04 (Noble) 
-* **ROS 2 Version**: Jazzy Jalisco
-* **Simulator**: Gazebo Sim (Harmonic)
+## Current status
 
----
+- Working and tested:
+  - Gazebo world launch + robot spawn
+  - Robot motion (`cmd_vel`)
+  - Rich TUI teleop + odometry monitor
+  - World rendering with local warehouse assets
+- Not fully working / not fully tested yet:
+  - Mapping
+  - Navigation (Nav2)
 
-## 📂 Project Structure
-| Package | Description |
-| :--- | :--- |
-| **mecanum_robot_description** | Contains URDF/Xacro files, STL meshes, and RViz configurations. |
-| **mecanum_robot_bringup** | Contains launch scripts, Gazebo world files (`.sdf`), and bridge parameters. |
-| **mecanum_robot_navigation** | Contains the core navigation stack. |
+## Package layout
 
----
+- `mecanum_robot_description`: URDF/Xacro, meshes, models, worlds
+- `mecanum_robot_bringup`: simulation launch files, bridges, RViz, TUI teleop
+- `mecanum_robot_navigation`: spawn, localization, mapping, navigation launch/config
 
-## 🚀 Getting Started
+## Quick start
 
-### 1. Installation & Build
-Ensure you are in your workspace root and have sourced the ROS 2 environment.
+From workspace root:
 
 ```bash
-# Build the workspace
-cd ~/gp_ws
-colcon build 
+source /opt/ros/jazzy/setup.bash
+colcon build
 source install/setup.bash
-
 ```
 
-### 2. Launch Simulation
+If you use zsh, use `setup.zsh` instead of `setup.bash`.
 
-This command launches Gazebo, spawns the robot at the designated coordinates, and starts RViz.
+### Launch simulation (recommended baseline)
 
 ```bash
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py
-
+ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+  mode:=single \
+  world_package:=mecanum_robot_description \
+  world:=worlds/warehouse_v2.sdf
 ```
 
-### 3. Teleop Control
-
-To drive the robot manually using your keyboard, open a new terminal and run:
+### Launch Rich TUI teleop
 
 ```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
-
+ros2 run mecanum_robot_bringup rich_teleop_tui
 ```
 
-**Controls:**
+Controls:
 
-* **i / ,** : Forward / Backward
-* **j / l** : Rotation (Yaw)
-* **u / o** : Lateral Strafe (Left / Right)
-* **k** : Stop
+- `W/A/S/D`: translation
+- `Q/E`: rotation
+- `U/I`: lift up/down
+- `Space`: stop movement
+- `Ctrl+C`: exit
 
-### 4. Launch Navigation
-This command launches Gazebo, spawns the robot at the designated coordinates.
+### Dual lidar mode (optional)
+
 ```bash
-ros2 run launch mecanum_robot_navigation spawn_robot.launch.py
-
+ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+  mode:=2l \
+  world_package:=mecanum_robot_description \
+  world:=worlds/warehouse_v2.sdf
 ```
 
-This command launches Rviz, and Navigation Stack.
-```bash
-ros2 run launch mecanum_robot_navigation navigation.launch.py
+## Available worlds
 
-```
----
+- `worlds/warehouse.sdf`
+- `worlds/warehouse_v2.sdf`
+- `worlds/boxed_nav_test.sdf`
 
-## 📡 Sensor Integration
+## Full launch guide
 
-The framework is pre-configured to bridge the following data:
+For complete terminal-by-terminal instructions, troubleshooting, and team workflow, read:
 
-* **Lidar**: `/scan` (Sensor to ROS)
-* **IMU**: `/imu` (Sensor to ROS)
-* **Odometry**: `/odom` (Bidirectional)
-* **Velocity**: `/cmd_vel` (ROS to Gazebo)
-* **Lifting**: `/cmd_pos` (ROS to Gazebo)
----
+- `guide.md`

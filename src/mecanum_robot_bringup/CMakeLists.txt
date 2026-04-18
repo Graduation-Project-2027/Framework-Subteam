@@ -12,4 +12,10 @@ install(
     DESTINATION share/${PROJECT_NAME}/
 )
 
+install(
+    PROGRAMS scripts/rich_teleop_tui.py
+    DESTINATION lib/${PROJECT_NAME}
+    RENAME rich_teleop_tui
+)
+
 ament_package()

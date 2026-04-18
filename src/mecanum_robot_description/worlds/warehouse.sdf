@@ -1,0 +1,388 @@
+<?xml version="1.0"?>
+<!--
+  Warehouse world (gz sim, Harmonic / gz-sim 8, SDF 1.9).
+
+  World frame:
+    X: aisle length direction (row runs 0.0 → 5.80 m).
+    Y: row-to-row direction.
+    Z: up.
+
+  Layout — 5 rows × 5 racks = 25 racks, 4 aisles:
+    Row X centers:   0.50, 1.70, 2.90, 4.10, 5.30  (0.20 m gap between racks)
+    Row Y centers:  -6.80, -3.40, 0.00, 3.40, 6.80  (3.40 m center-to-center)
+    Aisle Y centers: -5.10, -1.70, 1.70, 5.10
+    Row length:      5.80 m  (5×1.00 + 4×0.20)
+
+  Run:
+    export GZ_SIM_RESOURCE_PATH=$PWD/models:$GZ_SIM_RESOURCE_PATH
+    gz sim worlds/warehouse.sdf
+-->
+<sdf version="1.9">
+  <world name="warehouse">
+
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+
+    <scene>
+      <ambient>0.3 0.3 0.3 1</ambient>
+      <grid>false</grid>
+    </scene>
+
+    <!-- Primary overhead spot — casts shadows, covers rack grid -->
+    <light type="spot" name="spot_main">
+      <pose>2.90 0 10.0 0 0 0</pose>
+      <diffuse>1 1 1 1</diffuse>
+      <specular>1 1 1 1</specular>
+      <intensity>1</intensity>
+      <attenuation>
+        <range>50</range>
+        <linear>0.01</linear>
+        <constant>0.01</constant>
+        <quadratic>0.0</quadratic>
+      </attenuation>
+      <direction>0 0 -1</direction>
+      <spot>
+        <inner_angle>0</inner_angle>
+        <outer_angle>3.0</outer_angle>
+        <falloff>0.5</falloff>
+      </spot>
+      <cast_shadows>true</cast_shadows>
+    </light>
+
+    <!-- Helper spots — no shadow cost, fill sides + loading zone -->
+    <light type="spot" name="spot_n">
+      <pose>2.90 -9 10.0 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.5 0.5 0.5 1</specular>
+      <intensity>1</intensity>
+      <attenuation><range>40</range><linear>0.02</linear><constant>0.02</constant><quadratic>0.0</quadratic></attenuation>
+      <direction>0 0 -1</direction>
+      <spot><inner_angle>0</inner_angle><outer_angle>3.0</outer_angle><falloff>0.5</falloff></spot>
+      <cast_shadows>false</cast_shadows>
+    </light>
+    <light type="spot" name="spot_s">
+      <pose>2.90  9 10.0 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.5 0.5 0.5 1</specular>
+      <intensity>1</intensity>
+      <attenuation><range>40</range><linear>0.02</linear><constant>0.02</constant><quadratic>0.0</quadratic></attenuation>
+      <direction>0 0 -1</direction>
+      <spot><inner_angle>0</inner_angle><outer_angle>3.0</outer_angle><falloff>0.5</falloff></spot>
+      <cast_shadows>false</cast_shadows>
+    </light>
+    <light type="spot" name="spot_loading">
+      <pose>14.0 0 10.0 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.5 0.5 0.5 1</specular>
+      <intensity>1</intensity>
+      <attenuation><range>30</range><linear>0.02</linear><constant>0.02</constant><quadratic>0.0</quadratic></attenuation>
+      <direction>0 0 -1</direction>
+      <spot><inner_angle>0</inner_angle><outer_angle>2.0</outer_angle><falloff>0.5</falloff></spot>
+      <cast_shadows>false</cast_shadows>
+    </light>
+
+    <!-- ============================================================= -->
+    <!-- Ground: physics only — hangar GLB provides the floor visual.  -->
+    <!-- ============================================================= -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="col">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </collision>
+      </link>
+    </model>
+
+    <!-- ============================================================= -->
+    <!-- Distribution Warehouse hangar (floor, walls, ceiling, docks). -->
+    <!-- ============================================================= -->
+    <include>
+      <uri>model://Distribution_Warehouse</uri>
+      <name>hangar</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- ============================================================= -->
+    <!-- 25 racks (DYNAMIC so the AMR can lift them).                  -->
+    <!-- Row length 5.80 m. X centers 0.50/1.70/2.90/4.10/5.30        -->
+    <!-- Row Y centers: -6.80, -3.40, 0.00, 3.40, 6.80                -->
+    <!-- ============================================================= -->
+    <!-- Row 1 (y=-6.80) -->
+    <include><uri>model://rack</uri><name>rack_r1c1</name><pose>0.50 -6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r1c2</name><pose>1.70 -6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r1c3</name><pose>2.90 -6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r1c4</name><pose>4.10 -6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r1c5</name><pose>5.30 -6.80 0 0 0 0</pose></include>
+    <!-- Row 2 (y=-3.40) -->
+    <include><uri>model://rack</uri><name>rack_r2c1</name><pose>0.50 -3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r2c2</name><pose>1.70 -3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r2c3</name><pose>2.90 -3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r2c4</name><pose>4.10 -3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r2c5</name><pose>5.30 -3.40 0 0 0 0</pose></include>
+    <!-- Row 3 (y=0.00) -->
+    <include><uri>model://rack</uri><name>rack_r3c1</name><pose>0.50  0.00 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r3c2</name><pose>1.70  0.00 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r3c3</name><pose>2.90  0.00 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r3c4</name><pose>4.10  0.00 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r3c5</name><pose>5.30  0.00 0 0 0 0</pose></include>
+    <!-- Row 4 (y=3.40) -->
+    <include><uri>model://rack</uri><name>rack_r4c1</name><pose>0.50  3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r4c2</name><pose>1.70  3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r4c3</name><pose>2.90  3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r4c4</name><pose>4.10  3.40 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r4c5</name><pose>5.30  3.40 0 0 0 0</pose></include>
+    <!-- Row 5 (y=6.80) -->
+    <include><uri>model://rack</uri><name>rack_r5c1</name><pose>0.50  6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r5c2</name><pose>1.70  6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r5c3</name><pose>2.90  6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r5c4</name><pose>4.10  6.80 0 0 0 0</pose></include>
+    <include><uri>model://rack</uri><name>rack_r5c5</name><pose>5.30  6.80 0 0 0 0</pose></include>
+
+    <!-- ============================================================= -->
+    <!-- Floor markings (visual-only, z=0.002).                        -->
+    <!--   Row length 5.80 m, solid line center x=2.90.               -->
+    <!--   12 dashes per lane, x = 0.15,0.65,1.15,...,5.65 (Δ=0.50). -->
+    <!--   Aisle 1 (y=-5.10): red -6.10/-4.10 | dashed -5.60/-4.60   -->
+    <!--   Aisle 2 (y=-1.70): red -2.70/-0.70 | dashed -2.20/-1.20   -->
+    <!--   Aisle 3 (y= 1.70): red  0.70/ 2.70 | dashed  1.20/ 2.20   -->
+    <!--   Aisle 4 (y= 5.10): red  4.10/ 6.10 | dashed  4.60/ 5.60   -->
+    <!-- ============================================================= -->
+    <model name="floor_markings">
+      <static>true</static>
+      <link name="lines">
+
+        <!-- ===== Aisle 1 (y=-5.10) ===== -->
+        <visual name="a1_red_lo"><pose>2.90 -6.10 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a1_red_hi"><pose>2.90 -4.10 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a1_yel">   <pose>2.90 -5.10 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0.9 0 1</ambient><diffuse>1 1 0 1</diffuse></material></visual>
+        <!-- left lane dashes (y=-5.60) -->
+        <visual name="a1_dl_1"> <pose>0.15 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_2"> <pose>0.65 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_3"> <pose>1.15 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_4"> <pose>1.65 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_5"> <pose>2.15 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_6"> <pose>2.65 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_7"> <pose>3.15 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_8"> <pose>3.65 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_9"> <pose>4.15 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_10"><pose>4.65 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_11"><pose>5.15 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dl_12"><pose>5.65 -5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <!-- right lane dashes (y=-4.60) -->
+        <visual name="a1_dh_1"> <pose>0.15 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_2"> <pose>0.65 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_3"> <pose>1.15 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_4"> <pose>1.65 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_5"> <pose>2.15 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_6"> <pose>2.65 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_7"> <pose>3.15 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_8"> <pose>3.65 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_9"> <pose>4.15 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_10"><pose>4.65 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_11"><pose>5.15 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a1_dh_12"><pose>5.65 -4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+
+        <!-- ===== Aisle 2 (y=-1.70) ===== -->
+        <visual name="a2_red_lo"><pose>2.90 -2.70 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a2_red_hi"><pose>2.90 -0.70 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a2_yel">   <pose>2.90 -1.70 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0.9 0 1</ambient><diffuse>1 1 0 1</diffuse></material></visual>
+        <!-- left lane dashes (y=-2.20) -->
+        <visual name="a2_dl_1"> <pose>0.15 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_2"> <pose>0.65 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_3"> <pose>1.15 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_4"> <pose>1.65 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_5"> <pose>2.15 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_6"> <pose>2.65 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_7"> <pose>3.15 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_8"> <pose>3.65 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_9"> <pose>4.15 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_10"><pose>4.65 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_11"><pose>5.15 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dl_12"><pose>5.65 -2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <!-- right lane dashes (y=-1.20) -->
+        <visual name="a2_dh_1"> <pose>0.15 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_2"> <pose>0.65 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_3"> <pose>1.15 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_4"> <pose>1.65 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_5"> <pose>2.15 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_6"> <pose>2.65 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_7"> <pose>3.15 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_8"> <pose>3.65 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_9"> <pose>4.15 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_10"><pose>4.65 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_11"><pose>5.15 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a2_dh_12"><pose>5.65 -1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+
+        <!-- ===== Aisle 3 (y=1.70) ===== -->
+        <visual name="a3_red_lo"><pose>2.90  0.70 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a3_red_hi"><pose>2.90  2.70 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a3_yel">   <pose>2.90  1.70 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0.9 0 1</ambient><diffuse>1 1 0 1</diffuse></material></visual>
+        <!-- left lane dashes (y=1.20) -->
+        <visual name="a3_dl_1"> <pose>0.15  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_2"> <pose>0.65  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_3"> <pose>1.15  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_4"> <pose>1.65  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_5"> <pose>2.15  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_6"> <pose>2.65  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_7"> <pose>3.15  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_8"> <pose>3.65  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_9"> <pose>4.15  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_10"><pose>4.65  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_11"><pose>5.15  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dl_12"><pose>5.65  1.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <!-- right lane dashes (y=2.20) -->
+        <visual name="a3_dh_1"> <pose>0.15  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_2"> <pose>0.65  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_3"> <pose>1.15  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_4"> <pose>1.65  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_5"> <pose>2.15  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_6"> <pose>2.65  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_7"> <pose>3.15  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_8"> <pose>3.65  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_9"> <pose>4.15  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_10"><pose>4.65  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_11"><pose>5.15  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a3_dh_12"><pose>5.65  2.20 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+
+        <!-- ===== Aisle 4 (y=5.10) ===== -->
+        <visual name="a4_red_lo"><pose>2.90  4.10 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a4_red_hi"><pose>2.90  6.10 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material></visual>
+        <visual name="a4_yel">   <pose>2.90  5.10 0.002 0 0 0</pose><geometry><box><size>5.80 0.05 0.005</size></box></geometry><material><ambient>0.9 0.9 0 1</ambient><diffuse>1 1 0 1</diffuse></material></visual>
+        <!-- left lane dashes (y=4.60) -->
+        <visual name="a4_dl_1"> <pose>0.15  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_2"> <pose>0.65  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_3"> <pose>1.15  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_4"> <pose>1.65  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_5"> <pose>2.15  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_6"> <pose>2.65  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_7"> <pose>3.15  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_8"> <pose>3.65  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_9"> <pose>4.15  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_10"><pose>4.65  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_11"><pose>5.15  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dl_12"><pose>5.65  4.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <!-- right lane dashes (y=5.60) -->
+        <visual name="a4_dh_1"> <pose>0.15  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_2"> <pose>0.65  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_3"> <pose>1.15  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_4"> <pose>1.65  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_5"> <pose>2.15  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_6"> <pose>2.65  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_7"> <pose>3.15  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_8"> <pose>3.65  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_9"> <pose>4.15  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_10"><pose>4.65  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_11"><pose>5.15  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+        <visual name="a4_dh_12"><pose>5.65  5.60 0.002 0 0 0</pose><geometry><box><size>0.30 0.05 0.005</size></box></geometry><material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material></visual>
+
+      </link>
+    </model>
+
+    <!-- ============================================================= -->
+    <!-- Static obstacles configuration                                 -->
+    <!--   Aisle 1: two obstacles alternating lanes                    -->
+    <!--   Aisle 2: one obstacle                                       -->
+    <!--   Aisle 4: clear (no obstacle model placed)                   -->
+    <!-- ============================================================= -->
+    <model name="obstacle_a1_left">
+      <static>true</static>
+      <pose>1.70 -5.60 0.20 0 0 0</pose>
+      <link name="body">
+        <collision name="col">
+          <geometry><box><size>0.60 0.40 0.40</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.60 0.40 0.40</size></box></geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obstacle_a1_right">
+      <static>true</static>
+      <pose>4.10 -4.60 0.20 0 0 0</pose>
+      <link name="body">
+        <collision name="col">
+          <geometry><box><size>0.60 0.40 0.40</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.60 0.40 0.40</size></box></geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obstacle_a2_single">
+      <static>true</static>
+      <pose>2.90 -1.20 0.20 0 0 0</pose>
+      <link name="body">
+        <collision name="col">
+          <geometry><box><size>0.60 0.40 0.40</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.60 0.40 0.40</size></box></geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.25 0.25 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================= -->
+    <!-- Aisle 3 dynamic actor                                          -->
+    <!--   Walks x=0.0 → 5.80 m along aisle 3 yellow center (y=1.70) -->
+    <!--   ~0.75 m/s → 7.7 s one-way.                                 -->
+    <!-- ============================================================= -->
+    <actor name="walker_aisle3">
+      <pose>0 1.70 0 0 0 0</pose>
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <delay_start>0.0</delay_start>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk" tension="0.6">
+          <waypoint><time>0.0</time> <pose>0.00 1.70 0 0 0 0</pose></waypoint>
+          <waypoint><time>7.7</time> <pose>5.80 1.70 0 0 0 0</pose></waypoint>
+          <waypoint><time>8.2</time> <pose>5.80 1.70 0 0 0 3.14159</pose></waypoint>
+          <waypoint><time>15.9</time><pose>0.00 1.70 0 0 0 3.14159</pose></waypoint>
+          <waypoint><time>16.4</time><pose>0.00 1.70 0 0 0 0</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <!-- ============================================================= -->
+    <!-- Loading zone decal — 4×4 m slab with LOADING AREA texture.   -->
+    <!-- ============================================================= -->
+    <include>
+      <uri>model://loading_zone</uri>
+      <name>loading_zone</name>
+      <pose>14.0 0.0 0.0 0 0 0</pose>
+    </include>
+
+  </world>
+</sdf>
