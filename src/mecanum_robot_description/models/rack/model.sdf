@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="rack">
+    <!-- Dynamic (non-static) so the AMR can lift it via shelf_1 contact.
+         Robot stowed h=0.30 fits under shelf_1 (z_bottom=0.35, 0.05 clearance),
+         lift stroke=0.15 raises rack by 0.10 (shelf_1 bottom: 0.35 -> 0.45). -->
+
+    <link name="base">
+      <inertial>
+        <mass>15.0</mass>
+        <pose>0 0 0.70 0 0 0</pose>
+        <inertia>
+          <ixx>4.45</ixx>
+          <iyy>4.45</iyy>
+          <izz>2.50</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <!-- ===== Legs: 0.05 x 0.05 x 1.60 at corners (outer face at +/-0.50) ===== -->
+      <collision name="leg_fl_col">
+        <pose>0.475 0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+      </collision>
+      <visual name="leg_fl_vis">
+        <pose>0.475 0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+        <material>
+          <ambient>0.1 0.5 0.1 1</ambient>
+          <diffuse>0.1 0.6 0.1 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <collision name="leg_fr_col">
+        <pose>0.475 -0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+      </collision>
+      <visual name="leg_fr_vis">
+        <pose>0.475 -0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+        <material>
+          <ambient>0.1 0.5 0.1 1</ambient>
+          <diffuse>0.1 0.6 0.1 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <collision name="leg_rl_col">
+        <pose>-0.475 0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+      </collision>
+      <visual name="leg_rl_vis">
+        <pose>-0.475 0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+        <material>
+          <ambient>0.1 0.5 0.1 1</ambient>
+          <diffuse>0.1 0.6 0.1 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <collision name="leg_rr_col">
+        <pose>-0.475 -0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+      </collision>
+      <visual name="leg_rr_vis">
+        <pose>-0.475 -0.475 0.8 0 0 0</pose>
+        <geometry><box><size>0.05 0.05 1.60</size></box></geometry>
+        <material>
+          <ambient>0.1 0.5 0.1 1</ambient>
+          <diffuse>0.1 0.6 0.1 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <!-- ===== Shelf 1 (Lifting): z_bottom=0.35, z_top=0.40, center=0.375 ===== -->
+      <collision name="shelf_1_col">
+        <pose>0 0 0.375 0 0 0</pose>
+        <geometry><box><size>1.00 1.00 0.05</size></box></geometry>
+      </collision>
+      <visual name="shelf_1_vis">
+        <pose>0 0 0.375 0 0 0</pose>
+        <geometry><box><size>1.00 1.00 0.05</size></box></geometry>
+        <material>
+          <ambient>0.55 0.35 0.15 1</ambient>
+          <diffuse>0.80 0.45 0.15 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <!-- ===== Shelf 2 (Middle): z_bottom=0.95, z_top=1.00, center=0.975 ===== -->
+      <collision name="shelf_2_col">
+        <pose>0 0 0.975 0 0 0</pose>
+        <geometry><box><size>1.00 1.00 0.05</size></box></geometry>
+      </collision>
+      <visual name="shelf_2_vis">
+        <pose>0 0 0.975 0 0 0</pose>
+        <geometry><box><size>1.00 1.00 0.05</size></box></geometry>
+        <material>
+          <ambient>0.55 0.35 0.15 1</ambient>
+          <diffuse>0.80 0.45 0.15 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <!-- ===== Shelf 3 (Top): z_bottom=1.55, z_top=1.60, center=1.575 ===== -->
+      <collision name="shelf_3_col">
+        <pose>0 0 1.575 0 0 0</pose>
+        <geometry><box><size>1.00 1.00 0.05</size></box></geometry>
+      </collision>
+      <visual name="shelf_3_vis">
+        <pose>0 0 1.575 0 0 0</pose>
+        <geometry><box><size>1.00 1.00 0.05</size></box></geometry>
+        <material>
+          <ambient>0.55 0.35 0.15 1</ambient>
+          <diffuse>0.80 0.45 0.15 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

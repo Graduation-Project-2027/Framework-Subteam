@@ -68,10 +68,10 @@
                 <specular>${gazebo_material_specular}</specular>
             </material>
             <sensor name="${prefix}imu_sensor" type="imu">
-                <topic>imu</topic>
+                <topic>${topic_name}</topic>
                 <update_rate>${update_rate}</update_rate>
                 <always_on>${always_on}</always_on>
-                <visualize>true</visualize>
+                <visualize>${visualize}</visualize>
                 <gz_frame_id>${prefix}${frame_id}_link</gz_frame_id>
             </sensor>
         </gazebo>

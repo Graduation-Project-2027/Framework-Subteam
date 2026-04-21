@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:property name="lift_mass" value="5.0" />
-  <xacro:property name="lift_range" value="0.5" /> 
+  <xacro:property name="lift_range" value="0.25" />
 
   <xacro:macro name="lift_mechanism" params="prefix parent_link">
 
@@ -30,11 +30,16 @@
     </link>
 
     <joint name="${prefix}lift_joint" type="prismatic">
-      <parent link="${parent_link}"/>
+      <parent link="${prefix}${parent_link}"/>
       <child link="${prefix}lift_link"/>
-      <origin xyz="0 0 0.15" rpy="0 0 0"/> 
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
       <axis xyz="0 0 1"/>
-      <limit lower="0" upper="${lift_range}" effort="200" velocity="0.2"/>
+      <limit lower="0" upper="${lift_range}" effort="200" velocity="0.12"/>
+      <safety_controller
+        soft_lower_limit="0.0"
+        soft_upper_limit="${lift_range}"
+        k_position="50.0"
+        k_velocity="20.0"/>
       <dynamics damping="15.0" friction="2.0"/>
     </joint>
 
@@ -50,6 +55,16 @@
 
     <gazebo reference="${prefix}lift_link">
       <material>Gazebo/Grey</material>
+      <collision>
+        <surface>
+          <friction>
+            <ode>
+              <mu>10.0</mu>
+              <mu2>10.0</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
     </gazebo>
 
   </xacro:macro>
