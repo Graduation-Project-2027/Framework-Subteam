@@ -1,6 +1,6 @@
-# Framework-Subteam: Mecanum Mobile Manipulator
+# Framework-Subteam: AGV Mobile Manipulator
 
-This repository contains the simulation, robot description, bringup, and navigation stack for the graduation project mecanum mobile manipulator.
+This repository contains the simulation, robot description, bringup, and navigation stack for the graduation project agv mobile manipulator.
 
 ## Current status
 
@@ -15,9 +15,9 @@ This repository contains the simulation, robot description, bringup, and navigat
 
 ## Package layout
 
-- `mecanum_robot_description`: URDF/Xacro, meshes, models, worlds
-- `mecanum_robot_bringup`: simulation launch files, bridges, RViz, TUI teleop
-- `mecanum_robot_navigation`: spawn, localization, mapping, navigation launch/config
+- `agv_description`: URDF/Xacro, meshes, models, worlds
+- `agv_bringup`: simulation launch files, bridges, RViz, TUI teleop
+- `agv_navigation`: spawn, localization, mapping, navigation launch/config
 
 ## Quick start
 
@@ -34,16 +34,16 @@ If you use zsh, use `setup.zsh` instead of `setup.bash`.
 ### Launch simulation (recommended baseline)
 
 ```bash
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+ros2 launch agv_bringup agv_gazebo.launch.py \
   mode:=single \
-  world_package:=mecanum_robot_description \
+  world_package:=agv_description \
   world:=worlds/warehouse_v2.sdf
 ```
 
 ### Launch Rich TUI teleop
 
 ```bash
-ros2 run mecanum_robot_bringup rich_teleop_tui
+ros2 run agv_bringup rich_teleop_tui
 ```
 
 Controls:
@@ -57,9 +57,9 @@ Controls:
 ### Dual lidar mode (optional)
 
 ```bash
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+ros2 launch agv_bringup agv_gazebo.launch.py \
   mode:=2l \
-  world_package:=mecanum_robot_description \
+  world_package:=agv_description \
   world:=worlds/warehouse_v2.sdf
 ```
 
