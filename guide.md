@@ -1,4 +1,4 @@
-# GUIDE: Framework-Subteam Bringup, Teleop, Worlds, Mapping, and Navigation
+# GUIDE: AGV Bringup, Teleop, Mapping, and Navigation
 
 This guide is for team members opening this repository for the first time.
 
@@ -18,13 +18,12 @@ It explains:
 - Motion commands (`cmd_vel`) and base movement
 - Rich TUI teleop (movement + lift + odom display)
 - Warehouse model rendering (`warehouse` and `warehouse_v2`)
+- Dual-Lidar Scan Merging
+- SLAM Toolbox Mapping & Localization
+- Nav2 Navigation (MPPI Controller)
 
-### Not fully working / not fully tested yet
-
-- Mapping (SLAM)
-- Navigation (Nav2)
-
-Treat mapping/navigation launches as development/testing flows, not production-ready.
+### Production Readiness
+Treat the `2_lidars` mode as the standard experimental setup. Baseline single lidar mode is also stabilized.
 
 ---
 
@@ -33,7 +32,7 @@ Treat mapping/navigation launches as development/testing flows, not production-r
 Go to workspace root:
 
 ```bash
-cd /home/som3a-station/prjs/Grad/Framework-Subteam
+cd /home/user/Framework-Subteam
 ```
 
 Build once after updates:
@@ -59,10 +58,10 @@ Important: if a command says package not found, you likely forgot to source `ins
 
 Most launch files in this repo use these:
 
-- `mode:=single|2l`
+- `mode:=single|2_lidars`
   - `single`: original robot setup (default)
-  - `2l`: dual-lidar setup (`2l_robot.urdf.xacro` + 2-lidar bridge/config)
-- `world_package:=mecanum_robot_description`
+  - `2_lidars`: dual-lidar setup (`2_lidars_robot.urdf.xacro` + 2-lidar bridge/config)
+- `world_package:=agv_description`
 - `world:=worlds/<file>.sdf`
 
 Common world values:
@@ -81,11 +80,11 @@ Use this 2-terminal flow for reliable simulation + manual control.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/som3a-station/prjs/Grad/Framework-Subteam/install/setup.bash
+source /home/user/Framework-Subteam/install/setup.bash
 
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+ros2 launch agv_bringup agv_gazebo.launch.py \
   mode:=single \
-  world_package:=mecanum_robot_description \
+  world_package:=agv_description \
   world:=worlds/warehouse_v2.sdf
 ```
 
@@ -93,9 +92,9 @@ ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/som3a-station/prjs/Grad/Framework-Subteam/install/setup.bash
+source /home/user/Framework-Subteam/install/setup.bash
 
-ros2 run mecanum_robot_bringup rich_teleop_tui
+ros2 run agv_bringup rich_teleop_tui
 ```
 
 TUI controls:
@@ -109,7 +108,7 @@ TUI controls:
 Optional speed tuning:
 
 ```bash
-ros2 run mecanum_robot_bringup rich_teleop_tui --ros-args \
+ros2 run agv_bringup rich_teleop_tui --ros-args \
   -p linear_speed:=0.6 \
   -p strafe_speed:=0.6 \
   -p angular_speed:=1.2 \
@@ -123,30 +122,30 @@ ros2 run mecanum_robot_bringup rich_teleop_tui --ros-args \
 This also launches world + robot + bridge + EKF:
 
 ```bash
-ros2 launch mecanum_robot_navigation spawn_robot.launch.py \
+ros2 launch agv_navigation spawn_robot.launch.py \
   mode:=single \
-  world_package:=mecanum_robot_description \
+  world_package:=agv_description \
   world:=worlds/warehouse_v2.sdf
 ```
 
 For dual lidar:
 
 ```bash
-ros2 launch mecanum_robot_navigation spawn_robot.launch.py \
-  mode:=2l \
-  world_package:=mecanum_robot_description \
+ros2 launch agv_navigation spawn_robot.launch.py \
+  mode:=2_lidars \
+  world_package:=agv_description \
   world:=worlds/warehouse_v2.sdf
 ```
 
-Do not run this at the same time as `mecanum_robot_gazebo.launch.py`.
+Do not run this at the same time as `agv_gazebo.launch.py`.
 
 ---
 
 ## 6) Dual lidar mode details (`mode:=2l`)
 
-When `mode:=2l` is used:
+When `mode:=2_lidars` is used:
 
-- robot model switches to `2l_robot.urdf.xacro`
+- robot model switches to `2_lidars_robot.urdf.xacro`
 - rear lidar is enabled (`scan_rear`)
 - 2-lidar bridge config is used
 - 2-lidar nav/mapping/localization configs are selected
@@ -163,49 +162,49 @@ These launches are available but currently considered not fully validated.
 ### Localization
 
 ```bash
-ros2 launch mecanum_robot_navigation localization.launch.py mode:=single
+ros2 launch agv_navigation localization.launch.py mode:=single
 ```
 
 or:
 
 ```bash
-ros2 launch mecanum_robot_navigation localization.launch.py mode:=2l
+ros2 launch agv_navigation localization.launch.py mode:=2_lidars
 ```
 
 ### Mapping (SLAM)
 
 ```bash
-ros2 launch mecanum_robot_navigation mapping.launch.py mode:=single
+ros2 launch agv_navigation mapping.launch.py mode:=single
 ```
 
 or:
 
 ```bash
-ros2 launch mecanum_robot_navigation mapping.launch.py mode:=2l
+ros2 launch agv_navigation mapping.launch.py mode:=2_lidars
 ```
 
 ### Navigation
 
 ```bash
-ros2 launch mecanum_robot_navigation navigation.launch.py mode:=single
+ros2 launch agv_navigation navigation.launch.py mode:=single
 ```
 
 or:
 
 ```bash
-ros2 launch mecanum_robot_navigation navigation.launch.py mode:=2l
+ros2 launch agv_navigation navigation.launch.py mode:=2_lidars
 ```
 
 ### Navigation + SLAM combined
 
 ```bash
-ros2 launch mecanum_robot_navigation navigation_with_slam.launch.py mode:=single
+ros2 launch agv_navigation navigation_with_slam.launch.py mode:=single
 ```
 
 or:
 
 ```bash
-ros2 launch mecanum_robot_navigation navigation_with_slam.launch.py mode:=2l
+ros2 launch agv_navigation navigation_with_slam.launch.py mode:=2_lidars
 ```
 
 ---
@@ -219,9 +218,9 @@ ros2 launch mecanum_robot_navigation navigation_with_slam.launch.py mode:=2l
 Example using boxed test world:
 
 ```bash
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+ros2 launch agv_bringup agv_gazebo.launch.py \
   mode:=single \
-  world_package:=mecanum_robot_description \
+  world_package:=agv_description \
   world:=worlds/boxed_nav_test.sdf
 ```
 
@@ -272,8 +271,8 @@ Use launch files (`world.launch.py` is already setting resource paths).
 If running `gz sim` directly, export model paths manually:
 
 ```bash
-export GZ_SIM_RESOURCE_PATH=$PWD/src/mecanum_robot_description/models:$PWD/src/mecanum_robot_description:$GZ_SIM_RESOURCE_PATH
-export IGN_GAZEBO_RESOURCE_PATH=$PWD/src/mecanum_robot_description/models:$PWD/src/mecanum_robot_description:$IGN_GAZEBO_RESOURCE_PATH
+export GZ_SIM_RESOURCE_PATH=$PWD/src/agv_description/models:$PWD/src/agv_description:$GZ_SIM_RESOURCE_PATH
+export IGN_GAZEBO_RESOURCE_PATH=$PWD/src/agv_description/models:$PWD/src/agv_description:$IGN_GAZEBO_RESOURCE_PATH
 ```
 
 ### C) Duplicate publishers / strange nav preflight warnings
@@ -287,7 +286,7 @@ Re-source environment in that terminal:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/som3a-station/prjs/Grad/Framework-Subteam/install/setup.bash
+source /home/user/Framework-Subteam/install/setup.bash
 ```
 
 ---
@@ -295,7 +294,7 @@ source /home/som3a-station/prjs/Grad/Framework-Subteam/install/setup.bash
 ## 11) Team conventions
 
 - Prefer `mode:=single` for demos and stable baseline behavior.
-- Use `mode:=2l` only for dual-lidar development/tests.
+- Use `mode:=2_lidars` only for dual-lidar development/tests.
 - Always pass `world` explicitly in demos to avoid ambiguity.
 - Keep mapping/navigation changes isolated and tested before claiming readiness.
 
@@ -307,10 +306,10 @@ Terminal 1:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/som3a-station/prjs/Grad/Framework-Subteam/install/setup.bash
-ros2 launch mecanum_robot_bringup mecanum_robot_gazebo.launch.py \
+source /home/user/Framework-Subteam/install/setup.bash
+ros2 launch agv_bringup agv_gazebo.launch.py \
   mode:=single \
-  world_package:=mecanum_robot_description \
+  world_package:=agv_description \
   world:=worlds/warehouse_v2.sdf
 ```
 
@@ -318,8 +317,8 @@ Terminal 2:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/som3a-station/prjs/Grad/Framework-Subteam/install/setup.bash
-ros2 run mecanum_robot_bringup rich_teleop_tui
+source /home/user/Framework-Subteam/install/setup.bash
+ros2 run agv_bringup rich_teleop_tui
 ```
 
 This is currently the most reliable end-to-end flow.

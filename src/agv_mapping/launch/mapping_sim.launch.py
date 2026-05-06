@@ -75,7 +75,7 @@ def generate_launch_description():
 
     mapping_start_delay_arg = DeclareLaunchArgument(
         "mapping_start_delay_sec",
-        default_value="5.0",
+        default_value="10.0",
         description="Delay before starting mapping launch after simulation bringup",
     )
 

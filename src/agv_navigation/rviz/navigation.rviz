@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /TF1/Frames1
         - /ParticleCloud1/Topic1
+        - /Global Costmap1
       Splitter Ratio: 0.5
     Tree Height: 243
   - Class: rviz_common/Selection
@@ -86,52 +87,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        cam_1_color_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_color_optical_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_depth_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_depth_optical_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_infra1_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_infra1_optical_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_infra2_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_infra2_optical_frame:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        cam_1_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        camera_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        camera_link_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
         front_left_wheel_link:
           Alpha: 1
           Show Axes: false
@@ -148,6 +103,16 @@ Visualization Manager:
           Show Trail: false
           Value: true
         laser_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        laser_rear_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        lift_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -175,28 +140,6 @@ Visualization Manager:
           Value: false
         base_link:
           Value: false
-        cam_1_color_frame:
-          Value: true
-        cam_1_color_optical_frame:
-          Value: true
-        cam_1_depth_frame:
-          Value: true
-        cam_1_depth_optical_frame:
-          Value: true
-        cam_1_infra1_frame:
-          Value: true
-        cam_1_infra1_optical_frame:
-          Value: true
-        cam_1_infra2_frame:
-          Value: true
-        cam_1_infra2_optical_frame:
-          Value: true
-        cam_1_link:
-          Value: true
-        camera_link:
-          Value: false
-        camera_link_optical:
-          Value: false
         front_left_wheel_link:
           Value: true
         front_right_wheel_link:
@@ -204,6 +147,10 @@ Visualization Manager:
         imu_link:
           Value: false
         laser_frame:
+          Value: true
+        laser_rear_frame:
+          Value: true
+        lift_link:
           Value: true
         map:
           Value: true
@@ -223,22 +170,6 @@ Visualization Manager:
                   {}
                 back_right_wheel_link:
                   {}
-                cam_1_link:
-                  cam_1_color_frame:
-                    cam_1_color_optical_frame:
-                      {}
-                  cam_1_depth_frame:
-                    cam_1_depth_optical_frame:
-                      {}
-                  cam_1_infra1_frame:
-                    cam_1_infra1_optical_frame:
-                      {}
-                  cam_1_infra2_frame:
-                    cam_1_infra2_optical_frame:
-                      {}
-                camera_link:
-                  camera_link_optical:
-                    {}
                 front_left_wheel_link:
                   {}
                 front_right_wheel_link:
@@ -246,6 +177,10 @@ Visualization Manager:
                 imu_link:
                   {}
                 laser_frame:
+                  {}
+                laser_rear_frame:
+                  {}
+                lift_link:
                   {}
       Update Interval: 0
       Value: true
@@ -291,12 +226,15 @@ Visualization Manager:
         Value: /camera/image/compressed
       Value: false
       Visibility:
-        "": true
+        Global Costmap: true
+        Global Footprint: true
         Grid: true
-        Imu: true
         InteractiveMarkers: true
         LaserScan: true
+        Local Costmap: true
+        Local Footprint: true
         Map: true
+        MarkerArray: true
         Odometry filtered: true
         ParticleCloud: true
         Path: true
@@ -501,10 +439,10 @@ Visualization Manager:
       Binary representation: false
       Binary threshold: 100
       Class: rviz_default_plugins/Map
-      Color Scheme: map
+      Color Scheme: costmap
       Draw Behind: false
       Enabled: true
-      Name: Map
+      Name: Local Costmap
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -518,6 +456,29 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /local_costmap/costmap_updates
+      Use Timestamp: false
+      Value: true
+    - Alpha: 0.699999988079071
+      Binary representation: false
+      Binary threshold: 100
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: true
+      Enabled: true
+      Name: Global Costmap
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap_updates
       Use Timestamp: false
       Value: true
     - Class: rviz_default_plugins/MarkerArray

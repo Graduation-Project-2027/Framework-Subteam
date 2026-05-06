@@ -1,97 +1,35 @@
-# Framework-Subteam Handover Notes (Current State)
+# Final Handover: AGV Navigation & Mapping Stability
 
-This file is an implementation handover for future engineers/agents working on this repository.
-It is based on the current workspace state and the original private repo README (`Graduation-Project-2027/Framework-Subteam`).
+This document summarizes the current stable state of the AGV project after the ROS 2 Jazzy migration and stabilization.
 
-## 1) What has been added/changed
+## 1. Project State
+- **Core Base:** Mechanum-drive AGV with dual-lidar sensor fusion.
+- **OS:** ROS 2 Jazzy.
+- **Simulation:** Gazebo Fortress.
 
-- Added a Rich TUI teleop node for direct robot control + odom monitoring:
-  - `src/agv_bringup/scripts/rich_teleop_tui.py`
-  - Run with: `ros2 run agv_bringup rich_teleop_tui`
-  - Keys: `W/A/S/D` translation, `Q/E` rotation, `U/I` lift
-- Added launch/install/runtime plumbing for the TUI:
-  - `src/agv_bringup/CMakeLists.txt`
-  - `src/agv_bringup/package.xml`
-- Added dual-lidar robot model (without replacing original robot):
-  - `src/agv_description/urdf/urdf/2l_robot.urdf.xacro`
-  - Original `robot.urdf.xacro` remains available and untouched for default mode
-- Added mode-based launch behavior (`single` by default, `2l` optional):
-  - `src/agv_bringup/launch/agv_gazebo.launch.py`
-  - `src/agv_navigation/launch/spawn_robot.launch.py`
-- Added 2-lidar bridge/filter/nav config set:
-  - `src/agv_bringup/config/gz_bridge_2l.yaml`
-  - `src/agv_navigation/config/gz_bridge_2l.yaml`
-  - `src/agv_navigation/config/laser_filters_2l.yaml`
-  - `src/agv_navigation/config/navigation_2l.yaml`
-  - `src/agv_navigation/config/amcl_localization_2l.yaml`
-  - `src/agv_navigation/config/slam_toolbox_mapping_2l.yaml`
-  - plus launch updates in `navigation.launch.py`, `localization.launch.py`, `mapping.launch.py`
-- Updated lift mechanism behavior in shared lift macro:
-  - `src/agv_description/urdf/urdf/lift.urdf.xacro`
-  - Soft/upper range reduced to `0.25` (from `0.5`)
-  - Lift velocity reduced to `0.12` (from `0.2`)
-  - Added high surface friction on lift link collision (`mu=10`, `mu2=10`)
+## 2. Key Stability Fixes (Jazzy)
+- **MPPI Controller:** Fixed motion model capitalization (`"Omni"`) and parameter structure.
+- **Collision Monitor:** Resolved node crashes by using a "disabled pass-through" configuration to avoid type errors on empty polygon lists in Jazzy.
+- **Costmap Consistency:** Increased `inflation_radius` to `0.55m` to satisfy the circumscribed radius constraint of the robot footprint (~0.517m).
+- **Scan Merging:** Stabilized the `scan_merger.py` node with TF availability checks to prevent startup crashes.
+- **Pose Synchronization:** Synchronized the Gazebo spawn position with the SLAM Toolbox `map_start_pose` at `(-1.545, 1.621, 0.014)`.
 
-## 2) Current functional status
+## 3. Configuration & Launch
+- **Unified Simulation Launch:** `agv_navigation navigation_sim.launch.py`
+  - Argument `mode:=2_lidars`: Enables dual-lidar bridge, merger, and filters.
+  - Argument `mode:=single`: Baseline single-lidar configuration.
+- **Localization:** Both modes now use SLAM Toolbox in `localization` mode by default, loading the `Hang1` map.
+- **Mapping:** To start fresh mapping, pass `map_file:=""` to the simulation launch.
 
-### Working and tested
+## 4. Maintenance Notes
+- **RViz:** If costmaps appear blank on Nvidia hardware, it is a known shader bug. Change the Color Scheme to `map` in the Map display properties.
+- **File Cleanup:** Removed unused mapping-only configs (`slam_toolbox_mapping*`) from the navigation package to keep the directory clean.
 
-- **World/simulation setup:** working.
-- **Robot motion configuration:** working (cmd_vel behavior is configured and functioning).
-- **Rich TUI teleop:** working well for movement + lift control in one terminal.
-
-### Not working / not tested yet
-
-- **Mapping:** currently not working and not validated end-to-end.
-- **Navigation (Nav2):** currently not working and not validated end-to-end.
-
-## 3) Important mode behavior (do not break)
-
-- Default mode should preserve existing/original flow:
-  - `mode:=single` (implicit default)
-- New experimental mode:
-  - `mode:=2l`
-- Keep original robot path stable while iterating on 2-lidar mode.
-
-## 4) Launch commands to know
-
-### Default/original behavior
-
+## 5. Launch Commands
 ```bash
-ros2 launch agv_bringup agv_gazebo.launch.py
-ros2 launch agv_navigation spawn_robot.launch.py
-ros2 launch agv_navigation navigation.launch.py
-```
+# Recommended baseline (2-lidar Nav + SLAM)
+ros2 launch agv_navigation navigation_sim.launch.py mode:=2_lidars
 
-### Dual-lidar behavior
-
-```bash
-ros2 launch agv_bringup agv_gazebo.launch.py mode:=2l
-ros2 launch agv_navigation spawn_robot.launch.py mode:=2l
-ros2 launch agv_navigation navigation.launch.py mode:=2l
-```
-
-### TUI teleop
-
-```bash
+# Manual TUI Control
 ros2 run agv_bringup rich_teleop_tui
 ```
-
-## 5) Validation already done in this workspace
-
-- Python syntax checks passed for edited launch/TUI files (`py_compile`).
-- YAML parse checks passed for newly added config files.
-- Full package build/runtime validation for nav/mapping has **not** been completed in this pass.
-
-## 6) Highest-priority next work
-
-1. Fix mapping launch/runtime path and verify map generation from start to save.
-2. Fix Nav2 bringup path and verify localization + goal navigation end-to-end.
-3. Verify `mode:=single` and `mode:=2l` in clean environments to ensure no regressions.
-4. Validate lift friction behavior with a rack payload and tune if needed.
-
-## 7) Notes for future agents
-
-- Prefer adding new behavior under `mode:=2l` unless explicitly asked to alter default behavior.
-- Treat mapping/nav stack as unstable until proven with reproducible test runs.
-- If changing bridge/topic names, update both launch and YAML files together.

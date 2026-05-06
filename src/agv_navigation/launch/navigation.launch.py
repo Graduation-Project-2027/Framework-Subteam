@@ -1,387 +1,199 @@
 import os
-import time
-import rclpy
-from nav_msgs.msg import Odometry
-from rosgraph_msgs.msg import Clock
-from sensor_msgs.msg import LaserScan
+
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    EmitEvent,
     IncludeLaunchDescription,
     LogInfo,
-    OpaqueFunction,
-    SetLaunchConfiguration,
-    Shutdown,
+    RegisterEventHandler,
 )
 from launch.conditions import IfCondition, LaunchConfigurationEquals
+from launch.events import matches_action
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
-from ament_index_python.packages import (
-    PackageNotFoundError,
-    get_package_share_directory,
-)
-
-
-def _as_bool(value):
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
-
-def _run_navigation_preflight(context, *args, **kwargs):
-    if not _as_bool(LaunchConfiguration("preflight_check").perform(context)):
-        return [
-            LogInfo(
-                msg="Navigation preflight disabled; skipping /scan and /clock readiness checks."
-            )
-        ]
-
-    timeout_sec = float(LaunchConfiguration("preflight_timeout_sec").perform(context))
-    poll_sec = float(LaunchConfiguration("preflight_poll_sec").perform(context))
-    use_sim_time = _as_bool(LaunchConfiguration("use_sim_time").perform(context))
-
-    mode = LaunchConfiguration("mode").perform(context)
-
-    required_scan_topic = "/scan" if mode == "single" else "/scan_merged"
-    required_topics = [required_scan_topic, "/odometry/filtered"]
-    if use_sim_time:
-        required_topics.append("/clock")
-
-    initialized_here = False
-    if not rclpy.ok():
-        rclpy.init(args=None)
-        initialized_here = True
-
-    graph_node = rclpy.create_node("navigation_preflight_check")
-    deadline = time.time() + timeout_sec
-    last_counts = {topic: 0 for topic in required_topics}
-    topic_received = {topic: False for topic in required_topics}
-
-    def _mark_received(topic_name):
-        def _callback(_msg):
-            topic_received[topic_name] = True
-
-        return _callback
-
-    graph_node.create_subscription(
-        LaserScan,
-        required_scan_topic,
-        _mark_received(required_scan_topic),
-        10,
-    )
-    graph_node.create_subscription(
-        Odometry,
-        "/odometry/filtered",
-        _mark_received("/odometry/filtered"),
-        10,
-    )
-    if use_sim_time:
-        graph_node.create_subscription(Clock, "/clock", _mark_received("/clock"), 10)
-
-    try:
-        while time.time() < deadline:
-            duplicate_sources = []
-            missing_topics = []
-            missing_messages = []
-
-            rclpy.spin_once(graph_node, timeout_sec=poll_sec)
-
-            for topic in required_topics:
-                count = len(graph_node.get_publishers_info_by_topic(topic))
-                last_counts[topic] = count
-                if count == 0:
-                    missing_topics.append(topic)
-                elif count > 1:
-                    duplicate_sources.append(f"{topic}={count}")
-                if not topic_received[topic]:
-                    missing_messages.append(topic)
-
-            if duplicate_sources:
-                message = (
-                    "Navigation preflight failed: multiple publishers detected "
-                    f"({', '.join(duplicate_sources)}). "
-                    "This usually means multiple Gazebo/bridge bringup instances are running."
-                )
-                return [LogInfo(msg=message), Shutdown(reason=message)]
-
-            if not missing_topics and not missing_messages:
-                counts = ", ".join(
-                    f"{topic}={last_counts[topic]}" for topic in required_topics
-                )
-                return [
-                    LogInfo(
-                        msg=(
-                            "Navigation preflight passed: "
-                            f"{counts}. Starting localization and navigation."
-                        )
-                    )
-                ]
-
-        counts = ", ".join(f"{topic}={last_counts[topic]}" for topic in required_topics)
-        no_data = ", ".join(
-            topic for topic in required_topics if not topic_received[topic]
-        )
-        message = (
-            "Navigation preflight failed: required topics are not ready "
-            f"after {timeout_sec:.1f}s ({counts}). "
-            f"No messages received yet on: [{no_data}]. "
-            f"Expected live {required_scan_topic}, /odometry/filtered and /clock (if sim time) before AMCL can publish map->odom."
-        )
-        return [LogInfo(msg=message), Shutdown(reason=message)]
-    finally:
-        graph_node.destroy_node()
-        if initialized_here and rclpy.ok():
-            rclpy.shutdown()
+from launch_ros.actions import LifecycleNode, Node
+from launch_ros.event_handlers import OnStateTransition
+from launch_ros.events.lifecycle import ChangeState
+from lifecycle_msgs.msg import Transition
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
 
-    pkg_agv_navigation = get_package_share_directory(
-        "agv_navigation"
-    )
+    pkg_nav = get_package_share_directory("agv_navigation")
 
-    rviz_launch_arg = DeclareLaunchArgument(
-        "rviz", default_value="true", description="Open RViz"
-    )
-
-    rviz_config_arg = DeclareLaunchArgument(
-        "rviz_config", default_value="navigation.rviz", description="RViz config file"
-    )
-
-    sim_time_arg = DeclareLaunchArgument(
-        "use_sim_time", default_value="True", description="Flag to enable use_sim_time"
-    )
-
-    mode_arg = DeclareLaunchArgument(
-        "mode",
-        default_value="single",
-        description="Navigation mode: single or 2_lidars",
-    )
-
-    world_package_arg = DeclareLaunchArgument(
-        "world_package",
-        default_value="agv_description",
-        description="Package that contains the Gazebo world file",
-    )
-
-    world_arg = DeclareLaunchArgument(
-        "world",
-        default_value="worlds/warehouse_v2.sdf",
-        description="World file path relative to world_package share directory",
-    )
-
-    use_twist_marker_arg = DeclareLaunchArgument(
-        "use_twist_marker",
-        default_value="false",
-        description="Launch interactive marker twist server if available",
-    )
-
-    preflight_check_arg = DeclareLaunchArgument(
-        "preflight_check",
-        default_value="true",
-        description="Check /scan and /clock publisher readiness before launching Nav2",
-    )
-
-    preflight_timeout_arg = DeclareLaunchArgument(
-        "preflight_timeout_sec",
-        default_value="60.0",
-        description="Maximum seconds to wait for preflight topics",
-    )
-
-    preflight_poll_arg = DeclareLaunchArgument(
-        "preflight_poll_sec",
-        default_value="0.25",
-        description="Polling period in seconds for preflight checks",
-    )
-
-    interactive_marker_config_file_path = os.path.join(
-        get_package_share_directory("agv_navigation"),
-        "config",
-        "interactive_marker_planar.yaml",
-    )
-
-    # Path to the Slam Toolbox launch file
-    nav2_localization_launch_path = os.path.join(
-        get_package_share_directory("nav2_bringup"), "launch", "localization_launch.py"
-    )
-
-    nav2_navigation_launch_path = os.path.join(
+    # ── Paths ────────────────────────────────────────────────────────────
+    nav2_launch = os.path.join(
         get_package_share_directory("nav2_bringup"), "launch", "navigation_launch.py"
     )
-
-    localization_params_path = os.path.join(
-        get_package_share_directory("agv_navigation"),
-        "config",
-        "amcl_localization.yaml",
-    )
-    localization_params_path_2_lidars = os.path.join(
-        get_package_share_directory("agv_navigation"),
-        "config",
-        "amcl_localization_2_lidars.yaml",
+    slam_launch = os.path.join(
+        get_package_share_directory("slam_toolbox"), "launch", "online_async_launch.py"
     )
 
-    navigation_params_path = os.path.join(
-        get_package_share_directory("agv_navigation"),
-        "config",
-        "navigation.yaml",
+    nav_params_single = os.path.join(pkg_nav, "config", "navigation.yaml")
+    nav_params_2_lidars = os.path.join(pkg_nav, "config", "navigation_2_lidars.yaml")
+    slam_params_single = os.path.join(pkg_nav, "config", "slam_toolbox_localization_single.yaml")
+    slam_params_2_lidars = os.path.join(
+        pkg_nav, "config", "slam_toolbox_localization_2_lidars.yaml"
     )
-    navigation_params_path_2_lidars = os.path.join(
-        get_package_share_directory("agv_navigation"),
-        "config",
-        "navigation_2_lidars.yaml",
-    )
+    laser_filter_params = os.path.join(pkg_nav, "config", "laser_filters_2_lidars.yaml")
+    default_map = os.path.join(pkg_nav, "maps", "Hang1")
 
-    laser_filters_params_path = os.path.join(
-        get_package_share_directory("agv_navigation"),
-        "config",
-        "laser_filters_2_lidars.yaml",
-    )
+    # ── Arguments ────────────────────────────────────────────────────────
+    args = [
+        DeclareLaunchArgument("mode", default_value="single",
+                              description="single or 2_lidars"),
+        DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("rviz", default_value="true", description="Open RViz"),
+        DeclareLaunchArgument("rviz_config", default_value="navigation.rviz"),
+        DeclareLaunchArgument("map_file", default_value=default_map,
+                              description="SLAM Toolbox serialized map (no extension)"),
+    ]
 
-    map_file_path = os.path.join(
-        get_package_share_directory("agv_navigation"), "maps", "map.yaml"
-    )
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    mode = LaunchConfiguration("mode")
 
-    # Accept world args for consistent launcher UX.
-    # navigation.launch.py itself doesn't spawn Gazebo/world.
-    world_package_passthrough = SetLaunchConfiguration(
-        "world_package", LaunchConfiguration("world_package")
-    )
-    world_passthrough = SetLaunchConfiguration("world", LaunchConfiguration("world"))
-
-    # Launch rviz
+    # ── RViz ─────────────────────────────────────────────────────────────
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
         arguments=[
             "-d",
-            PathJoinSubstitution(
-                [
-                    pkg_agv_navigation,
-                    "rviz",
-                    LaunchConfiguration("rviz_config"),
-                ]
-            ),
+            PathJoinSubstitution([pkg_nav, "rviz", LaunchConfiguration("rviz_config")]),
         ],
+        parameters=[{"use_sim_time": use_sim_time}],
         condition=IfCondition(LaunchConfiguration("rviz")),
-        parameters=[
-            {"use_sim_time": LaunchConfiguration("use_sim_time")},
-        ],
     )
 
-    try:
-        get_package_share_directory("interactive_marker_twist_server")
-        interactive_marker_twist_server_node = Node(
-            package="interactive_marker_twist_server",
-            executable="marker_server",
-            name="twist_server_node",
-            parameters=[interactive_marker_config_file_path],
-            output="screen",
-            condition=IfCondition(LaunchConfiguration("use_twist_marker")),
-        )
-    except PackageNotFoundError:
-        interactive_marker_twist_server_node = LogInfo(
-            msg="interactive_marker_twist_server not found; skipping twist marker server."
-        )
-
-    scan_filter_front_node = Node(
+    # ── Scan filters + merger (2_lidars only) ────────────────────────────
+    scan_filter_front = Node(
         package="laser_filters",
         executable="scan_to_scan_filter_chain",
         name="scan_filter_front",
         output="screen",
-        parameters=[
-            laser_filters_params_path,
-            {"use_sim_time": LaunchConfiguration("use_sim_time")},
-        ],
+        parameters=[laser_filter_params, {"use_sim_time": use_sim_time}],
         remappings=[("scan", "/scan"), ("scan_filtered", "/scan_front_filtered")],
         condition=LaunchConfigurationEquals("mode", "2_lidars"),
     )
 
-    scan_filter_rear_node = Node(
+    scan_filter_rear = Node(
         package="laser_filters",
         executable="scan_to_scan_filter_chain",
         name="scan_filter_rear",
         output="screen",
-        parameters=[
-            laser_filters_params_path,
-            {"use_sim_time": LaunchConfiguration("use_sim_time")},
-        ],
+        parameters=[laser_filter_params, {"use_sim_time": use_sim_time}],
         remappings=[("scan", "/scan_rear"), ("scan_filtered", "/scan_rear_filtered")],
         condition=LaunchConfigurationEquals("mode", "2_lidars"),
     )
 
-    scan_merger_node = Node(
+    scan_merger = Node(
         package="agv_mapping",
         executable="scan_merger.py",
         name="scan_merger",
         output="screen",
+        parameters=[{"use_sim_time": use_sim_time}],
+        condition=LaunchConfigurationEquals("mode", "2_lidars"),
+    )
+
+    # ── SLAM Toolbox ─────────────────────────────────────────────────────
+
+    # Single-lidar: use the standard slam_toolbox launch (handles lifecycle)
+    slam_single = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(slam_launch),
+        launch_arguments={
+            "use_sim_time": use_sim_time,
+            "slam_params_file": slam_params_single,
+        }.items(),
+        condition=LaunchConfigurationEquals("mode", "single"),
+    )
+
+    # 2-lidars: LifecycleNode with localization config + map loading
+    slam_2_lidars = LifecycleNode(
+        package="slam_toolbox",
+        executable="async_slam_toolbox_node",
+        name="slam_toolbox",
+        namespace="",
+        output="screen",
         parameters=[
-            {"use_sim_time": LaunchConfiguration("use_sim_time")},
+            slam_params_2_lidars,
+            {
+                "use_sim_time": use_sim_time,
+                "use_lifecycle_manager": False,
+                "map_file_name": LaunchConfiguration("map_file"),
+                "map_start_at_dock": True,
+            },
         ],
         condition=LaunchConfigurationEquals("mode", "2_lidars"),
     )
 
-    navigation_preflight = OpaqueFunction(function=_run_navigation_preflight)
+    # Lifecycle transitions: configure → activate (same as online_async_launch.py)
+    slam_configure = EmitEvent(
+        event=ChangeState(
+            lifecycle_node_matcher=matches_action(slam_2_lidars),
+            transition_id=Transition.TRANSITION_CONFIGURE,
+        ),
+        condition=LaunchConfigurationEquals("mode", "2_lidars"),
+    )
 
-    localization_launch_single = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(nav2_localization_launch_path),
+    slam_activate = RegisterEventHandler(
+        OnStateTransition(
+            target_lifecycle_node=slam_2_lidars,
+            start_state="configuring",
+            goal_state="inactive",
+            entities=[
+                LogInfo(msg="[Lifecycle] SLAM Toolbox activating."),
+                EmitEvent(
+                    event=ChangeState(
+                        lifecycle_node_matcher=matches_action(slam_2_lidars),
+                        transition_id=Transition.TRANSITION_ACTIVATE,
+                    )
+                ),
+            ],
+        ),
+        condition=LaunchConfigurationEquals("mode", "2_lidars"),
+    )
+
+    # ── Nav2 ─────────────────────────────────────────────────────────────
+    nav2_single = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(nav2_launch),
         launch_arguments={
-            "use_sim_time": LaunchConfiguration("use_sim_time"),
-            "params_file": localization_params_path,
-            "map": map_file_path,
+            "use_sim_time": use_sim_time,
+            "params_file": nav_params_single,
         }.items(),
         condition=LaunchConfigurationEquals("mode", "single"),
     )
 
-    localization_launch_2_lidars = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(nav2_localization_launch_path),
+    nav2_2_lidars = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(nav2_launch),
         launch_arguments={
-            "use_sim_time": LaunchConfiguration("use_sim_time"),
-            "params_file": localization_params_path_2_lidars,
-            "map": map_file_path,
+            "use_sim_time": use_sim_time,
+            "params_file": nav_params_2_lidars,
         }.items(),
         condition=LaunchConfigurationEquals("mode", "2_lidars"),
     )
 
-    navigation_launch_single = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(nav2_navigation_launch_path),
-        launch_arguments={
-            "use_sim_time": LaunchConfiguration("use_sim_time"),
-            "params_file": navigation_params_path,
-        }.items(),
-        condition=LaunchConfigurationEquals("mode", "single"),
-    )
+    # ── Build launch description ─────────────────────────────────────────
+    ld = LaunchDescription()
 
-    navigation_launch_2_lidars = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(nav2_navigation_launch_path),
-        launch_arguments={
-            "use_sim_time": LaunchConfiguration("use_sim_time"),
-            "params_file": navigation_params_path_2_lidars,
-        }.items(),
-        condition=LaunchConfigurationEquals("mode", "2_lidars"),
-    )
+    for arg in args:
+        ld.add_action(arg)
 
-    launchDescriptionObject = LaunchDescription()
+    ld.add_action(rviz_node)
 
-    launchDescriptionObject.add_action(rviz_launch_arg)
-    launchDescriptionObject.add_action(rviz_config_arg)
-    launchDescriptionObject.add_action(sim_time_arg)
-    launchDescriptionObject.add_action(mode_arg)
-    launchDescriptionObject.add_action(world_package_arg)
-    launchDescriptionObject.add_action(world_arg)
-    launchDescriptionObject.add_action(world_package_passthrough)
-    launchDescriptionObject.add_action(world_passthrough)
-    launchDescriptionObject.add_action(use_twist_marker_arg)
-    launchDescriptionObject.add_action(preflight_check_arg)
-    launchDescriptionObject.add_action(preflight_timeout_arg)
-    launchDescriptionObject.add_action(preflight_poll_arg)
-    launchDescriptionObject.add_action(rviz_node)
-    launchDescriptionObject.add_action(interactive_marker_twist_server_node)
-    launchDescriptionObject.add_action(scan_filter_front_node)
-    launchDescriptionObject.add_action(scan_filter_rear_node)
-    launchDescriptionObject.add_action(scan_merger_node)
-    launchDescriptionObject.add_action(navigation_preflight)
-    launchDescriptionObject.add_action(localization_launch_single)
-    launchDescriptionObject.add_action(localization_launch_2_lidars)
-    launchDescriptionObject.add_action(navigation_launch_single)
-    launchDescriptionObject.add_action(navigation_launch_2_lidars)
+    # Scan processing (2_lidars)
+    ld.add_action(scan_filter_front)
+    ld.add_action(scan_filter_rear)
+    ld.add_action(scan_merger)
 
-    return launchDescriptionObject
+    # SLAM
+    ld.add_action(slam_single)
+    ld.add_action(slam_2_lidars)
+    ld.add_action(slam_configure)
+    ld.add_action(slam_activate)
+
+    # Nav2
+    ld.add_action(nav2_single)
+    ld.add_action(nav2_2_lidars)
+
+    return ld
