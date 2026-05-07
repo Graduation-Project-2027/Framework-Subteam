@@ -55,42 +55,18 @@ public:
         ////////////////////////////////////////////////////////////////////////////////
         // Define coordinates for known locations
         if (location == "A") { 
-            // Updated with new Frame:map coordinates!
-            goal_msg.pose.pose.position.x = 2.60; 
-            goal_msg.pose.pose.position.y = -0.199286; 
-            goal_msg.pose.pose.orientation.z = 0.01345;
-            goal_msg.pose.pose.orientation.w = 0.99991;
+            goal_msg.pose.pose.position.x = 2.00; goal_msg.pose.pose.position.y = 0.50; 
         } else if (location == "B") { 
-            // NOTE: You still need to capture map-frame coordinates for B!
-            // Currently using your old base_footprint ones as a placeholder.
-            goal_msg.pose.pose.position.x = -0.01803; 
-            goal_msg.pose.pose.position.y = -0.01243; 
-            goal_msg.pose.pose.orientation.z = 0.008688;
-            goal_msg.pose.pose.orientation.w = 0.999962;
+            goal_msg.pose.pose.position.x = 2.00; goal_msg.pose.pose.position.y = -0.50; 
         } else if (location == "X" || location == "HOME") { 
-            // Using your default spawn coordinates for HOME
-            goal_msg.pose.pose.position.x = 0.0; 
-            goal_msg.pose.pose.position.y = 3.5; 
-            goal_msg.pose.pose.orientation.z = 0.0;
-            goal_msg.pose.pose.orientation.w = 1.0;
+            goal_msg.pose.pose.position.x = 0.00; goal_msg.pose.pose.position.y = 0.00; 
         } else if (location == "Y" || location == "EXIT") { 
-            // Updated with your new X, Y coordinates. 
-            // Orientation defaults to 0.0 rotation (w=1.0) since it wasn't provided.
-            goal_msg.pose.pose.position.x = 2.717; 
-            goal_msg.pose.pose.position.y = -2.439; 
-            goal_msg.pose.pose.orientation.z = 0.0;
-            goal_msg.pose.pose.orientation.w = 1.0;
+            goal_msg.pose.pose.position.x = 2.00; goal_msg.pose.pose.position.y = -0.50; 
         } else { 
-            // Default fallback (Home)
-            goal_msg.pose.pose.position.x = 0.0; 
-            goal_msg.pose.pose.position.y = 3.5; 
-            goal_msg.pose.pose.orientation.z = 0.0;
-            goal_msg.pose.pose.orientation.w = 1.0;
-        }
-        // Ensure x and y orientation are always 0 for 2D planar navigation
-        goal_msg.pose.pose.orientation.x = 0.0;
-        goal_msg.pose.pose.orientation.y = 0.0;
-
+            goal_msg.pose.pose.position.x = 0.00; goal_msg.pose.pose.position.y = 0.00; 
+        } 
+        goal_msg.pose.pose.orientation.w = 1.0;
+        // Note: For simplicity, all orientations are set to 0. Adjust as needed for specific locations.
         auto send_goal_options = rclcpp_action::Client<NavigateAction>::SendGoalOptions();
         auto goal_handle_future = client_->async_send_goal(goal_msg, send_goal_options);
         ////////////////////////////////////////////////////////////////////////////////

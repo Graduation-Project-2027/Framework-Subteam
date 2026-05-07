@@ -3,7 +3,7 @@
         <Sequence name="MissionSequence">
             <NavigateTo name="NavigateToPick" target_pose="{pick_location}"/>
             
-            <LiftObject name="LiftPayload" target_height="0.2"/>
+            <LiftObject name="LiftPayload" target_height="1.0"/>
             
             <NavigateTo name="NavigateToExit" target_pose="EXIT"/>
             
