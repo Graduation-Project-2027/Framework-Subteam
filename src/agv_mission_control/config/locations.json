@@ -1,0 +1,33 @@
+{
+  "dock": {
+    "x": -1.545,
+    "y": 1.621,
+    "yaw": 0.014,
+    "name": "Home Dock"
+  },
+  "racks": [
+    {
+      "id": "rack_a",
+      "name": "Rack A",
+      "x": 5.0,
+      "y": 3.0,
+      "yaw": 0.0
+    },
+    {
+      "id": "rack_b",
+      "name": "Rack B",
+      "x": 8.0,
+      "y": -2.0,
+      "yaw": 1.57
+    }
+  ],
+  "drop_zones": [
+    {
+      "id": "zone_1",
+      "name": "Drop Zone 1",
+      "x": 2.0,
+      "y": 5.0,
+      "yaw": 0.0
+    }
+  ]
+}

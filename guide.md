@@ -21,6 +21,11 @@ It explains:
 - Dual-Lidar Scan Merging
 - SLAM Toolbox Mapping & Localization
 - Nav2 Navigation (MPPI Controller)
+- **Web-based Mission Control (React + Vite)**
+  - Live Map Visualization
+  - Rack/Dock Location Management
+  - Task Queue & Automated Missions
+  - Remote Teleop & Lift Control
 
 ### Production Readiness
 Treat the `2_lidars` mode as the standard experimental setup. Baseline single lidar mode is also stabilized.
@@ -155,9 +160,9 @@ Use this mode only when you specifically need dual-lidar experiments.
 
 ---
 
-## 7) Mapping and navigation (WIP)
+## 7) Mapping and navigation
 
-These launches are available but currently considered not fully validated.
+These launches are verified for ROS 2 Jazzy.
 
 ### Localization
 
@@ -291,34 +296,41 @@ source /home/user/Framework-Subteam/install/setup.bash
 
 ---
 
-## 11) Team conventions
+## 12) Quick start: Web Mission Control
 
-- Prefer `mode:=single` for demos and stable baseline behavior.
-- Use `mode:=2_lidars` only for dual-lidar development/tests.
-- Always pass `world` explicitly in demos to avoid ambiguity.
-- Keep mapping/navigation changes isolated and tested before claiming readiness.
+The mission control system provides a browser-based dashboard for high-level task management.
+
+### Setup (First time only)
+
+Run the installation script to set up `rosbridge-suite`, Node.js, and other dependencies:
+
+```bash
+bash src/agv_mission_control/install_deps.sh
+```
+
+### Launching the system
+
+1. **Launch Navigation Simulation:**
+   ```bash
+   ros2 launch agv_navigation navigation_sim.launch.py mode:=2_lidars
+   ```
+
+2. **Launch Mission Backend:**
+   In a new terminal:
+   ```bash
+   ros2 launch agv_mission_control mission_control.launch.py
+   ```
+
+3. **Start the Web GUI:**
+   In another terminal:
+   ```bash
+   cd src/agv_mission_control/gui
+   npm run dev
+   ```
+
+4. **Access the Dashboard:**
+   Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## 12) Known good demo commands
-
-Terminal 1:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source /home/user/Framework-Subteam/install/setup.bash
-ros2 launch agv_bringup agv_gazebo.launch.py \
-  mode:=single \
-  world_package:=agv_description \
-  world:=worlds/warehouse_v2.sdf
-```
-
-Terminal 2:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source /home/user/Framework-Subteam/install/setup.bash
-ros2 run agv_bringup rich_teleop_tui
-```
-
-This is currently the most reliable end-to-end flow.
+## 13) Team conventions

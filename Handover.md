@@ -13,6 +13,7 @@ This document summarizes the current stable state of the AGV project after the R
 - **Costmap Consistency:** Increased `inflation_radius` to `0.55m` to satisfy the circumscribed radius constraint of the robot footprint (~0.517m).
 - **Scan Merging:** Stabilized the `scan_merger.py` node with TF availability checks to prevent startup crashes.
 - **Pose Synchronization:** Synchronized the Gazebo spawn position with the SLAM Toolbox `map_start_pose` at `(-1.545, 1.621, 0.014)`.
+- **Mission Control System:** Implemented a new `agv_mission_control` package featuring a Vite + React web interface communicating via `rosbridge_suite`.
 
 ## 3. Configuration & Launch
 - **Unified Simulation Launch:** `agv_navigation navigation_sim.launch.py`
@@ -20,6 +21,7 @@ This document summarizes the current stable state of the AGV project after the R
   - Argument `mode:=single`: Baseline single-lidar configuration.
 - **Localization:** Both modes now use SLAM Toolbox in `localization` mode by default, loading the `Hang1` map.
 - **Mapping:** To start fresh mapping, pass `map_file:=""` to the simulation launch.
+- **Mission Management:** Tasks are managed through a JSON-persisted queue in `locations.json`. The `mission_manager_node` handles state transitions between navigation and lift operations.
 
 ## 4. Maintenance Notes
 - **RViz:** If costmaps appear blank on Nvidia hardware, it is a known shader bug. Change the Color Scheme to `map` in the Map display properties.
@@ -29,6 +31,10 @@ This document summarizes the current stable state of the AGV project after the R
 ```bash
 # Recommended baseline (2-lidar Nav + SLAM)
 ros2 launch agv_navigation navigation_sim.launch.py mode:=2_lidars
+
+# Mission Control (Run together)
+ros2 launch agv_mission_control mission_control.launch.py
+cd src/agv_mission_control/gui && npm run dev
 
 # Manual TUI Control
 ros2 run agv_bringup rich_teleop_tui

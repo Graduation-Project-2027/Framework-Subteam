@@ -11,6 +11,11 @@ This repository contains the simulation, robot description, bringup, and navigat
   - Dual-Lidar Scan Merging
   - SLAM Toolbox Mapping & Localization
   - Nav2 Navigation (MPPI Controller)
+  - **Web-based Mission Control (React + Vite)**
+    - Live Map Visualization
+    - Rack Location Management
+    - Task Queue & Management
+    - Remote Teleop & Lift Control
 
 ## Package layout
 
@@ -18,6 +23,7 @@ This repository contains the simulation, robot description, bringup, and navigat
 - `agv_bringup`: bridge configurations, RViz, TUI teleop
 - `agv_navigation`: spawn, localization, mapping, navigation launch/config
 - `agv_mapping`: laser processing and scan merger scripts
+- `agv_mission_control`: Web GUI and high-level task management
 
 ## Quick start
 
@@ -31,6 +37,16 @@ source install/setup.bash
 
 ```bash
 ros2 launch agv_navigation navigation_sim.launch.py mode:=2_lidars
+```
+
+### Launch Web Mission Control
+
+```bash
+# Terminal A: Launch backend
+ros2 launch agv_mission_control mission_control.launch.py
+
+# Terminal B: Start GUI
+cd src/agv_mission_control/gui && npm run dev
 ```
 
 ### Launch Rich TUI teleop

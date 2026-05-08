@@ -1,0 +1,15 @@
+<root BTCPP_format="4">
+    <BehaviorTree ID="MissionTree">
+        <Sequence name="MissionSequence">
+            <NavigateTo name="NavigateToPick" target_pose="{pick_location}"/>
+            
+            <LiftObject name="LiftPayload" target_height="1.0"/>
+            
+            <NavigateTo name="NavigateToExit" target_pose="EXIT"/>
+            
+            <LiftObject name="DropPayload" target_height="0.0"/>
+            
+            <NavigateTo name="NavigateToHome" target_pose="HOME"/>
+        </Sequence>
+    </BehaviorTree>
+</root>

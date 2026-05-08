@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mission_manager</name>
+  <version>0.0.0</version>
+  <description>Behavior Tree brain for the 2027 Mobile Manipulator graduation project</description>
+  <maintainer email="youssefsaeed11004@gmail.com">youssef-adel</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>rclcpp_action</depend>
+  <depend>std_msgs</depend>
+  <depend>custom_interfaces</depend>
+  <depend>nav2_msgs</depend>
+  <depend>behaviortree_cpp</depend>
+  <depend>ament_index_cpp</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

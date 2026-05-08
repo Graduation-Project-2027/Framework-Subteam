@@ -1,0 +1,10 @@
+{
+  "image": "map.png",
+  "resolution": 0.05,
+  "origin": [-22.024, -9.478, 0],
+  "width": 726,
+  "height": 808,
+  "negate": false,
+  "occupied_thresh": 0.65,
+  "free_thresh": 0.196
+}
