@@ -107,7 +107,7 @@ controller_server:
       vy_std: 0.2
       wz_std: 0.3
       vx_max: 0.3
-      vx_min: -0.2
+      vx_min: -0.1
       vy_max: 0.3
       wz_max: 1.2
       iteration_count: 1
@@ -150,12 +150,12 @@ controller_server:
       PreferForwardCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 15.0
         threshold_to_consider: 0.5
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.81
+        cost_weight: 12.0
         critical_cost: 300.0
         consider_footprint: true
         collision_cost: 1000000.0
@@ -209,7 +209,7 @@ local_costmap:
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.5
+        cost_scaling_factor: 1.5
         inflation_radius: 0.55
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
@@ -267,8 +267,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.5
-        inflation_radius: 0.35
+        cost_scaling_factor: 1.5
+        inflation_radius: 0.50
       always_send_full_costmap: True
 
 
@@ -280,7 +280,7 @@ planner_server:
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.5
-      use_astar: false
+      use_astar: true
       allow_unknown: true
 
 smoother_server:

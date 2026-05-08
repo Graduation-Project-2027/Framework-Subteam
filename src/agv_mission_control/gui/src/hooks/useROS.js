@@ -9,24 +9,31 @@ import * as ROSLIB from "roslib";
 
 const WS_URL = `ws://${window.location.hostname}:9090`;
 
+const DEFAULT_STATE = {
+  state: "IDLE",
+  robot_pose: { x: 0, y: 0, yaw: 0 },
+  current_task: null,
+  current_step: "",
+  progress: 0,
+  queue: [],
+  locations: { dock: { x: 0, y: 0, yaw: 0, name: "Dock" }, racks: [], drop_zones: [] },
+};
+
 export function useROS() {
   const [connected, setConnected] = useState(false);
-  const [missionState, setMissionState] = useState({
-    state: "IDLE",
-    robot_pose: { x: 0, y: 0, yaw: 0 },
-    current_task: null,
-    current_step: "",
-    progress: 0,
-    queue: [],
-    locations: { dock: {}, racks: [], drop_zones: [] },
-  });
+  const [missionState, setMissionState] = useState(DEFAULT_STATE);
   const [feedbackLog, setFeedbackLog] = useState([]);
   const rosRef = useRef(null);
   const cmdPubRef = useRef(null);
-  const teleopPubRef = useRef(null);
 
   useEffect(() => {
-    const ros = new ROSLIB.Ros({ url: WS_URL });
+    let ros;
+    try {
+      ros = new ROSLIB.Ros({ url: WS_URL });
+    } catch (err) {
+      console.error("[ROS] Failed to create connection:", err);
+      return;
+    }
 
     ros.on("connection", () => {
       console.log("[ROS] Connected to", WS_URL);
@@ -53,7 +60,19 @@ export function useROS() {
     stateTopic.subscribe((msg) => {
       try {
         const data = JSON.parse(msg.data);
-        setMissionState(data);
+        if (data && typeof data === "object") {
+          // Merge with defaults so we never lose required fields
+          setMissionState((prev) => ({
+            ...DEFAULT_STATE,
+            ...data,
+            robot_pose: { ...DEFAULT_STATE.robot_pose, ...(data.robot_pose || {}) },
+            locations: {
+              dock: { ...DEFAULT_STATE.locations.dock, ...(data.locations?.dock || {}) },
+              racks: Array.isArray(data.locations?.racks) ? data.locations.racks : [],
+              drop_zones: Array.isArray(data.locations?.drop_zones) ? data.locations.drop_zones : [],
+            },
+          }));
+        }
       } catch (e) {
         /* ignore parse errors */
       }
@@ -68,7 +87,9 @@ export function useROS() {
     feedbackTopic.subscribe((msg) => {
       try {
         const data = JSON.parse(msg.data);
-        setFeedbackLog((prev) => [...prev.slice(-200), data]);
+        if (data && data.message) {
+          setFeedbackLog((prev) => [...prev.slice(-200), data]);
+        }
       } catch (e) {
         /* ignore */
       }
@@ -81,25 +102,24 @@ export function useROS() {
       messageType: "std_msgs/msg/String",
     });
 
-    // ── Publisher: teleop ────────────────────────────────────────
-    teleopPubRef.current = new ROSLIB.Topic({
-      ros,
-      name: "/mission_control/command",
-      messageType: "std_msgs/msg/String",
-    });
-
     return () => {
-      stateTopic.unsubscribe();
-      feedbackTopic.unsubscribe();
-      ros.close();
+      try {
+        stateTopic.unsubscribe();
+        feedbackTopic.unsubscribe();
+        ros.close();
+      } catch (e) {
+        /* ignore cleanup errors */
+      }
     };
   }, []);
 
   const sendCommand = useCallback((cmd) => {
-    if (cmdPubRef.current) {
-      cmdPubRef.current.publish(
-        new ROSLIB.Message({ data: JSON.stringify(cmd) })
-      );
+    try {
+      if (cmdPubRef.current) {
+        cmdPubRef.current.publish({ data: JSON.stringify(cmd) });
+      }
+    } catch (err) {
+      console.warn("[ROS] Failed to send command:", err);
     }
   }, []);
 

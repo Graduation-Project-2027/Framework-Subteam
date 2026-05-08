@@ -347,6 +347,49 @@ body {
 
 .map-canvas {
   display: block;
+  cursor: grab;
+}
+
+.map-canvas:active {
+  cursor: grabbing;
+}
+
+.map-canvas--picking {
+  cursor: crosshair !important;
+}
+
+.map-coords {
+  position: absolute;
+  bottom: var(--gap-md);
+  right: var(--gap-md);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+.map-pick-banner {
+  position: absolute;
+  top: var(--gap-md);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent-warning);
+  color: #000;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  pointer-events: none;
+  animation: pulse-banner 1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-banner {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
 }
 
 .map-overlay {
@@ -361,7 +404,7 @@ body {
 .bottom-bar {
   grid-area: bottom;
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: 1px;
   background: var(--border-color);
 }
@@ -369,30 +412,29 @@ body {
 /* ── Teleop Panel ────────────────────────────────────────────── */
 .teleop {
   display: flex;
-  flex-direction: column;
-  gap: var(--gap-md);
   align-items: center;
-  padding: var(--gap-md);
+  gap: var(--gap-lg);
+  padding: var(--gap-sm) var(--gap-md);
 }
 
 .teleop__keys {
   display: grid;
-  grid-template-columns: repeat(3, 48px);
-  grid-template-rows: repeat(3, 48px);
-  gap: 4px;
+  grid-template-columns: repeat(3, 38px);
+  grid-template-rows: repeat(2, 38px);
+  gap: 3px;
 }
 
 .teleop__key {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-active);
-  color: var(--text-primary);
-  font-size: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 600;
   font-family: var(--font-mono);
   cursor: pointer;
@@ -403,13 +445,15 @@ body {
 .teleop__key:hover {
   background: var(--bg-hover);
   border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .teleop__key--active {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: white !important;
   box-shadow: var(--glow-blue);
+  transform: scale(0.94);
 }
 
 .teleop__key--empty {
@@ -418,7 +462,46 @@ body {
 
 .teleop__lift {
   display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.teleop__lift .btn {
+  font-size: 11px;
+  padding: 5px 10px;
+}
+
+/* ── Speed Control ──────────────────────────────────────────── */
+.speed-control {
+  display: flex;
+  align-items: center;
   gap: var(--gap-sm);
+  padding: var(--gap-sm) var(--gap-md);
+  background: var(--bg-secondary);
+}
+
+.speed-control__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.speed-control__slider {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--accent-primary);
+  height: 4px;
+  cursor: pointer;
+}
+
+.speed-control__value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-primary);
+  min-width: 52px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* ── Feedback Console ────────────────────────────────────────── */
@@ -633,6 +716,26 @@ body {
   justify-content: flex-end;
   gap: var(--gap-sm);
   margin-top: var(--gap-xl);
+}
+
+/* ── Minimized modal (pick-from-map) ─────────────────────────── */
+.modal-mini {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-warning);
+  border-radius: var(--radius-full);
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-warning);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: pulse-banner 1s ease-in-out infinite alternate;
 }
 
 /* ── Connection indicator ────────────────────────────────────── */

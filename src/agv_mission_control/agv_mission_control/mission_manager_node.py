@@ -33,8 +33,20 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
 from std_msgs.msg import String, Float64
 from geometry_msgs.msg import Twist, PoseStamped
-from nav_msgs.msg import Odometry
 from nav2_msgs.action import NavigateToPose
+from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.msg import Parameter as RclParameter
+from rcl_interfaces.msg import ParameterValue, ParameterType
+
+from tf2_ros import Buffer, TransformListener
+
+# ── Footprint constants ──────────────────────────────────────────────
+# Robot only: 0.70m × 0.64m
+FOOTPRINT_ROBOT = '[[0.35, 0.32], [0.35, -0.32], [-0.35, -0.32], [-0.35, 0.32]]'
+# Robot + rack: rack legs at ±0.475m from center → footprint 1.05m × 1.05m
+FOOTPRINT_CARRYING = '[[0.525, 0.525], [0.525, -0.525], [-0.525, -0.525], [-0.525, 0.525]]'
+# Min obstacle range when carrying: rack legs are at ~0.67m from center
+CARRYING_MIN_RANGE = 0.70
 
 
 def _quaternion_to_yaw(x, y, z, w):
@@ -70,6 +82,8 @@ class MissionManagerNode(Node):
         self._current_task_step = ""   # "navigating_to_rack" / "lifting" / etc.
         self._progress = 0.0           # 0.0 – 1.0
         self._robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+        self._speed_multiplier = 0.4  # m/s, adjustable from GUI
+        self._carrying = False  # True when rack is lifted
         self._lock = Lock()
         self._paused = False
         self._cancel_requested = False
@@ -92,16 +106,11 @@ class MissionManagerNode(Node):
         self._state_pub = self.create_publisher(String, "/mission_control/state", 10)
         self._feedback_pub = self.create_publisher(String, "/mission_control/feedback", 10)
 
+        # ── TF for robot pose (map frame) ────────────────────────────
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self)
+
         # ── Subscribers ──────────────────────────────────────────────
-        odom_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE,
-            depth=1,
-        )
-        self.create_subscription(
-            Odometry, "/odom", self._odom_cb, odom_qos,
-            callback_group=self.cb_group,
-        )
         self.create_subscription(
             String, "/mission_control/command", self._command_cb, 10,
             callback_group=self.cb_group,
@@ -112,6 +121,18 @@ class MissionManagerNode(Node):
 
         # ── Teleop publisher (relayed from GUI) ──────────────────────
         self._cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
+
+        # ── Costmap parameter clients (for dynamic footprint switch) ──
+        self._local_costmap_param_cli = self.create_client(
+            SetParameters,
+            '/local_costmap/local_costmap/set_parameters',
+            callback_group=self.cb_group,
+        )
+        self._global_costmap_param_cli = self.create_client(
+            SetParameters,
+            '/global_costmap/global_costmap/set_parameters',
+            callback_group=self.cb_group,
+        )
 
         # ── Nav2 action client ───────────────────────────────────────
         self._nav_client = ActionClient(
@@ -149,14 +170,17 @@ class MissionManagerNode(Node):
     # ─────────────────────────────────────────────────────────────────
     # Callbacks
     # ─────────────────────────────────────────────────────────────────
-    def _odom_cb(self, msg: Odometry):
-        p = msg.pose.pose.position
-        q = msg.pose.pose.orientation
+    def _update_robot_pose(self):
+        """Look up robot pose in the map frame via TF."""
         try:
+            t = self._tf_buffer.lookup_transform(
+                "map", "base_footprint", rclpy.time.Time())
+            p = t.transform.translation
+            q = t.transform.rotation
             yaw = _quaternion_to_yaw(q.x, q.y, q.z, q.w)
+            self._robot_pose = {"x": p.x, "y": p.y, "yaw": yaw}
         except Exception:
-            yaw = 0.0
-        self._robot_pose = {"x": p.x, "y": p.y, "yaw": yaw}
+            pass  # keep last known pose
 
     def _command_cb(self, msg: String):
         """Handle JSON commands from the GUI."""
@@ -195,6 +219,8 @@ class MissionManagerNode(Node):
             self._handle_teleop(cmd)
         elif action == "lift":
             self._handle_lift(cmd)
+        elif action == "set_speed":
+            self._handle_set_speed(cmd)
         elif action == "navigate_to":
             self._handle_navigate_to(cmd)
         else:
@@ -321,10 +347,23 @@ class MissionManagerNode(Node):
 
     def _handle_teleop(self, cmd):
         twist = Twist()
-        twist.linear.x = float(cmd.get("lx", 0.0))
-        twist.linear.y = float(cmd.get("ly", 0.0))
-        twist.angular.z = float(cmd.get("az", 0.0))
+        lx = float(cmd.get("lx", 0.0))
+        ly = float(cmd.get("ly", 0.0))
+        az = float(cmd.get("az", 0.0))
+        # Scale by speed multiplier (GUI sends ±1 relative values)
+        # The speed values from the GUI are already in the 0.4 range,
+        # so we scale by multiplier / 0.4
+        scale = self._speed_multiplier / 0.4
+        twist.linear.x = lx * scale
+        twist.linear.y = ly * scale
+        twist.angular.z = az * scale
         self._cmd_vel_pub.publish(twist)
+
+    def _handle_set_speed(self, cmd):
+        speed = float(cmd.get("speed", 0.4))
+        speed = max(0.1, min(1.0, speed))
+        self._speed_multiplier = speed
+        self._log(f"Max speed set to {speed:.2f} m/s")
 
     def _handle_lift(self, cmd):
         height = float(cmd.get("height", 0.0))
@@ -425,6 +464,9 @@ class MissionManagerNode(Node):
         self._lift_to(1.0)
         time.sleep(2.0)  # Wait for lift to complete
 
+        # Switch to carrying footprint and filter rack legs
+        self._set_carrying_mode(True)
+
         if self._cancel_requested or self._paused:
             return False
 
@@ -446,6 +488,9 @@ class MissionManagerNode(Node):
         self._log("Dropping rack...")
         self._lift_to(0.0)
         time.sleep(2.0)
+
+        # Revert to normal footprint
+        self._set_carrying_mode(False)
 
         self._log(f"Transport complete: {task.get('from_name')} → {task.get('to_name')}")
         return True
@@ -481,7 +526,15 @@ class MissionManagerNode(Node):
         future = self._nav_client.send_goal_async(
             goal, feedback_callback=self._nav_feedback_cb
         )
-        rclpy.spin_until_future_complete(self, future, timeout_sec=10.0)
+
+        # Wait for goal acceptance (callbacks fire from the main executor)
+        timeout = 10.0
+        t0 = time.time()
+        while not future.done():
+            if time.time() - t0 > timeout:
+                self._log("Nav2 goal send timed out!")
+                return False
+            time.sleep(0.05)
 
         goal_handle = future.result()
         if goal_handle is None or not goal_handle.accepted:
@@ -494,6 +547,11 @@ class MissionManagerNode(Node):
         # Block until nav completes
         while not result_future.done():
             if self._cancel_requested or self._paused:
+                # Cancel the goal if we're aborting
+                try:
+                    goal_handle.cancel_goal_async()
+                except Exception:
+                    pass
                 return False
             time.sleep(0.1)
 
@@ -517,10 +575,100 @@ class MissionManagerNode(Node):
         msg.data = float(height)
         self._lift_pub.publish(msg)
 
+    def _set_carrying_mode(self, carrying: bool):
+        """Switch costmap footprint and scan min_range for rack carrying."""
+        self._carrying = carrying
+        footprint = FOOTPRINT_CARRYING if carrying else FOOTPRINT_ROBOT
+        min_range = CARRYING_MIN_RANGE if carrying else 0.0
+        mode_str = "CARRYING" if carrying else "EMPTY"
+        self._log(f"Footprint → {mode_str}")
+
+        # Build parameter list
+        params = [
+            RclParameter(
+                name='footprint',
+                value=ParameterValue(
+                    type=ParameterType.PARAMETER_STRING,
+                    string_value=footprint,
+                ),
+            ),
+        ]
+
+        # Build scan min_range parameters (observation sources in voxel/obstacle layer)
+        scan_source_params = []
+        if carrying:
+            # Increase min_range on all observation sources to ignore rack legs
+            for src in ['scan_front', 'scan_rear', 'scan']:
+                for layer in ['voxel_layer', 'obstacle_layer']:
+                    scan_source_params.append(
+                        RclParameter(
+                            name=f'{layer}.{src}.obstacle_min_range',
+                            value=ParameterValue(
+                                type=ParameterType.PARAMETER_DOUBLE,
+                                double_value=min_range,
+                            ),
+                        )
+                    )
+        else:
+            for src in ['scan_front', 'scan_rear', 'scan']:
+                for layer in ['voxel_layer', 'obstacle_layer']:
+                    scan_source_params.append(
+                        RclParameter(
+                            name=f'{layer}.{src}.obstacle_min_range',
+                            value=ParameterValue(
+                                type=ParameterType.PARAMETER_DOUBLE,
+                                double_value=0.0,
+                            ),
+                        )
+                    )
+
+        # Apply to both costmaps
+        for client, name in [
+            (self._local_costmap_param_cli, "local_costmap"),
+            (self._global_costmap_param_cli, "global_costmap"),
+        ]:
+            try:
+                if not client.service_is_ready():
+                    self.get_logger().warn(
+                        f"[Carrying] {name} param service not ready, skipping")
+                    continue
+
+                # Set footprint
+                req = SetParameters.Request(parameters=params)
+                future = client.call_async(req)
+                # Wait briefly for response
+                t0 = time.time()
+                while not future.done() and time.time() - t0 < 2.0:
+                    time.sleep(0.05)
+                if future.done():
+                    resp = future.result()
+                    if resp and resp.results:
+                        success = all(r.successful for r in resp.results)
+                        if success:
+                            self.get_logger().info(
+                                f"[Carrying] {name} footprint updated")
+                        else:
+                            self.get_logger().warn(
+                                f"[Carrying] {name} footprint update failed: "
+                                f"{[r.reason for r in resp.results if not r.successful]}")
+
+                # Set scan min_range (best-effort, some params may not exist)
+                req2 = SetParameters.Request(parameters=scan_source_params)
+                future2 = client.call_async(req2)
+                t0 = time.time()
+                while not future2.done() and time.time() - t0 < 2.0:
+                    time.sleep(0.05)
+                # Don't check result — some params may not exist on some costmaps
+
+            except Exception as e:
+                self.get_logger().warn(
+                    f"[Carrying] Failed to update {name}: {e}")
+
     # ─────────────────────────────────────────────────────────────────
     # State broadcasting
     # ─────────────────────────────────────────────────────────────────
     def _publish_state(self):
+        self._update_robot_pose()
         state_data = {
             "state": self._state.value,
             "robot_pose": self._robot_pose,
@@ -529,6 +677,8 @@ class MissionManagerNode(Node):
             "progress": round(self._progress, 2),
             "queue": self._task_queue[:],
             "locations": self._locations,
+            "speed": self._speed_multiplier,
+            "carrying": self._carrying,
         }
         msg = String()
         msg.data = json.dumps(state_data)

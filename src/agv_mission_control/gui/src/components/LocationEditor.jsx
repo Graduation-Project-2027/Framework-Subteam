@@ -1,11 +1,12 @@
 /**
  * LocationEditor — Sidebar panel for managing rack/drop-zone locations
- * and dock configuration.
+ * and dock configuration. "Pick on Map" hides the modal so the map
+ * is accessible for clicking. Click+drag sets position+heading.
  */
 import { useState } from "react";
 
-export default function LocationEditor({ missionState, sendCommand }) {
-  const [editModal, setEditModal] = useState(null); // { type, index, data }
+export default function LocationEditor({ missionState, sendCommand, onPickFromMap }) {
+  const [editModal, setEditModal] = useState(null);
   const [dockModal, setDockModal] = useState(false);
 
   const locations = missionState.locations || { racks: [], drop_zones: [], dock: {} };
@@ -104,6 +105,7 @@ export default function LocationEditor({ missionState, sendCommand }) {
           data={editModal.data}
           onSave={(d) => handleSave(editModal.type, editModal.index, d)}
           onCancel={() => setEditModal(null)}
+          onPickFromMap={onPickFromMap}
         />
       )}
 
@@ -114,14 +116,45 @@ export default function LocationEditor({ missionState, sendCommand }) {
           data={locations.dock || { name: "Dock", x: 0, y: 0, yaw: 0 }}
           onSave={handleDockSave}
           onCancel={() => setDockModal(false)}
+          onPickFromMap={onPickFromMap}
         />
       )}
     </div>
   );
 }
 
-function EditModal({ title, data, onSave, onCancel }) {
+function EditModal({ title, data, onSave, onCancel, onPickFromMap }) {
   const [form, setForm] = useState({ ...data });
+  const [minimized, setMinimized] = useState(false);
+
+  const handlePickFromMap = () => {
+    setMinimized(true);
+    onPickFromMap?.((pos) => {
+      setForm((f) => ({
+        ...f,
+        x: pos.x,
+        y: pos.y,
+        yaw: pos.yaw !== undefined ? pos.yaw : f.yaw,
+      }));
+      setMinimized(false);
+    });
+  };
+
+  // When minimized, show a small floating chip instead of the full modal
+  if (minimized) {
+    return (
+      <div className="modal-mini">
+        <span>📍 Click &amp; drag on map to set pose…</span>
+        <button
+          className="btn btn--sm"
+          onClick={() => setMinimized(false)}
+          style={{ marginLeft: 8 }}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -136,34 +169,48 @@ function EditModal({ title, data, onSave, onCancel }) {
           />
         </div>
         <div className="modal__field">
-          <label className="modal__label">X (meters)</label>
-          <input
-            className="input"
-            type="number"
-            step="0.1"
-            value={form.x ?? 0}
-            onChange={(e) => setForm({ ...form, x: parseFloat(e.target.value) || 0 })}
-          />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <label className="modal__label" style={{ margin: 0 }}>Position &amp; Heading</label>
+            <button
+              className="btn btn--sm btn--primary"
+              onClick={handlePickFromMap}
+              style={{ fontSize: 11, padding: "3px 10px" }}
+            >
+              📍 Pick on Map
+            </button>
+          </div>
         </div>
-        <div className="modal__field">
-          <label className="modal__label">Y (meters)</label>
-          <input
-            className="input"
-            type="number"
-            step="0.1"
-            value={form.y ?? 0}
-            onChange={(e) => setForm({ ...form, y: parseFloat(e.target.value) || 0 })}
-          />
-        </div>
-        <div className="modal__field">
-          <label className="modal__label">Yaw (radians)</label>
-          <input
-            className="input"
-            type="number"
-            step="0.1"
-            value={form.yaw ?? 0}
-            onChange={(e) => setForm({ ...form, yaw: parseFloat(e.target.value) || 0 })}
-          />
+        <div style={{ display: "flex", gap: 8 }}>
+          <div className="modal__field" style={{ flex: 1 }}>
+            <label className="modal__label">X (m)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.1"
+              value={form.x ?? 0}
+              onChange={(e) => setForm({ ...form, x: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="modal__field" style={{ flex: 1 }}>
+            <label className="modal__label">Y (m)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.1"
+              value={form.y ?? 0}
+              onChange={(e) => setForm({ ...form, y: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="modal__field" style={{ flex: 1 }}>
+            <label className="modal__label">Yaw (°)</label>
+            <input
+              className="input"
+              type="number"
+              step="5"
+              value={Math.round((form.yaw ?? 0) * 180 / Math.PI)}
+              onChange={(e) => setForm({ ...form, yaw: (parseFloat(e.target.value) || 0) * Math.PI / 180 })}
+            />
+          </div>
         </div>
         <div className="modal__actions">
           <button className="btn" onClick={onCancel}>Cancel</button>

@@ -1,6 +1,7 @@
 /**
  * MapCanvas — Renders the PGM-derived map with robot pose,
  * rack markers, dock, and click-to-navigate.
+ * Supports pick mode: click to set position, drag to set heading.
  */
 import { useRef, useEffect, useState, useCallback } from "react";
 
@@ -11,9 +12,6 @@ const MAP_META = {
   height: 808,
 };
 
-/**
- * Convert world coordinates (meters) to pixel coordinates on the map image.
- */
 function worldToPixel(wx, wy) {
   const px = (wx - MAP_META.origin[0]) / MAP_META.resolution;
   const py = MAP_META.height - (wy - MAP_META.origin[1]) / MAP_META.resolution;
@@ -26,13 +24,17 @@ function pixelToWorld(px, py) {
   return [wx, wy];
 }
 
-export default function MapCanvas({ missionState, sendCommand }) {
+export default function MapCanvas({ missionState, sendCommand, onPickPosition, pickMode }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const imgRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 0.8 });
+  const [mouseWorld, setMouseWorld] = useState(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0 });
+  // Pick-drag state: click sets position, drag direction sets yaw
+  const pickDragRef = useRef(null); // { startPx, startPy, worldX, worldY }
+  const [pickArrow, setPickArrow] = useState(null); // { sx, sy, ex, ey, yaw } in canvas coords
 
   // Load map image
   useEffect(() => {
@@ -43,6 +45,47 @@ export default function MapCanvas({ missionState, sendCommand }) {
       setLoaded(true);
     };
   }, []);
+
+  // Convert mouse event to map-pixel coords
+  const getMapPixelFromMouse = useCallback(
+    (e) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const px =
+        (cx - (transform.x + canvas.width / 2)) / transform.scale +
+        MAP_META.width / 2;
+      const py =
+        (cy - (transform.y + canvas.height / 2)) / transform.scale +
+        MAP_META.height / 2;
+      return { px, py };
+    },
+    [transform]
+  );
+
+  const getWorldFromMouse = useCallback(
+    (e) => {
+      const p = getMapPixelFromMouse(e);
+      if (!p) return null;
+      const [wx, wy] = pixelToWorld(p.px, p.py);
+      return { x: Math.round(wx * 100) / 100, y: Math.round(wy * 100) / 100 };
+    },
+    [getMapPixelFromMouse]
+  );
+
+  // Convert map pixel to canvas screen pixel
+  const mapPxToScreen = useCallback(
+    (mpx, mpy) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return [0, 0];
+      const sx = (mpx - MAP_META.width / 2) * transform.scale + transform.x + canvas.width / 2;
+      const sy = (mpy - MAP_META.height / 2) * transform.scale + transform.y + canvas.height / 2;
+      return [sx, sy];
+    },
+    [transform]
+  );
 
   // Draw everything
   useEffect(() => {
@@ -130,7 +173,6 @@ export default function MapCanvas({ missionState, sendCommand }) {
       ctx.save();
       ctx.translate(rpx, rpy);
       ctx.rotate(yaw);
-      // Robot body
       ctx.fillStyle = "#3b82f6";
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
@@ -140,7 +182,6 @@ export default function MapCanvas({ missionState, sendCommand }) {
       ctx.lineTo(-8, 7);
       ctx.closePath();
       ctx.fill();
-      // Glow ring
       ctx.globalAlpha = 0.2;
       ctx.strokeStyle = "#3b82f6";
       ctx.lineWidth = 2;
@@ -151,7 +192,50 @@ export default function MapCanvas({ missionState, sendCommand }) {
     }
 
     ctx.restore();
-  }, [loaded, missionState, transform]);
+
+    // Draw pick arrow overlay (in screen space, after the main transform is restored)
+    if (pickArrow) {
+      ctx.save();
+      ctx.strokeStyle = "#f59e0b";
+      ctx.fillStyle = "#f59e0b";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pickArrow.sx, pickArrow.sy);
+      ctx.lineTo(pickArrow.ex, pickArrow.ey);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Arrow head
+      const angle = Math.atan2(pickArrow.ey - pickArrow.sy, pickArrow.ex - pickArrow.sx);
+      const hs = 10;
+      ctx.beginPath();
+      ctx.moveTo(pickArrow.ex, pickArrow.ey);
+      ctx.lineTo(
+        pickArrow.ex - hs * Math.cos(angle - 0.4),
+        pickArrow.ey - hs * Math.sin(angle - 0.4)
+      );
+      ctx.lineTo(
+        pickArrow.ex - hs * Math.cos(angle + 0.4),
+        pickArrow.ey - hs * Math.sin(angle + 0.4)
+      );
+      ctx.closePath();
+      ctx.fill();
+      // Dot at start
+      ctx.beginPath();
+      ctx.arc(pickArrow.sx, pickArrow.sy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Yaw text
+      ctx.font = "bold 11px Inter";
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "left";
+      ctx.fillText(
+        `${(pickArrow.yaw * 180 / Math.PI).toFixed(0)}°`,
+        pickArrow.ex + 8,
+        pickArrow.ey - 4
+      );
+      ctx.restore();
+    }
+  }, [loaded, missionState, transform, pickArrow]);
 
   // Resize handler
   useEffect(() => {
@@ -159,32 +243,105 @@ export default function MapCanvas({ missionState, sendCommand }) {
       if (canvasRef.current && containerRef.current) {
         canvasRef.current.width = containerRef.current.clientWidth;
         canvasRef.current.height = containerRef.current.clientHeight;
-        setLoaded((v) => v); // trigger re-render
+        setLoaded((v) => v);
       }
     });
     if (containerRef.current) obs.observe(containerRef.current);
     return () => obs.disconnect();
   }, []);
 
-  // Pan handlers
-  const onMouseDown = useCallback((e) => {
-    if (e.button === 0) {
+  // Mouse handlers
+  const onMouseDown = useCallback(
+    (e) => {
+      if (e.button !== 0) return;
+
+      if (pickMode) {
+        // Start pick: record click position
+        const mp = getMapPixelFromMouse(e);
+        const w = getWorldFromMouse(e);
+        if (mp && w) {
+          const [sx, sy] = mapPxToScreen(mp.px, mp.py);
+          pickDragRef.current = { screenX: sx, screenY: sy, worldX: w.x, worldY: w.y, mapPx: mp.px, mapPy: mp.py };
+          setPickArrow({ sx, sy, ex: sx, ey: sy, yaw: 0 });
+        }
+        return;
+      }
+
+      // Normal pan
       dragRef.current = { dragging: true, startX: e.clientX - transform.x, startY: e.clientY - transform.y };
-    }
-  }, [transform]);
+    },
+    [pickMode, transform, getMapPixelFromMouse, getWorldFromMouse, mapPxToScreen]
+  );
 
-  const onMouseMove = useCallback((e) => {
-    if (dragRef.current.dragging) {
-      setTransform((t) => ({
-        ...t,
-        x: e.clientX - dragRef.current.startX,
-        y: e.clientY - dragRef.current.startY,
-      }));
-    }
-  }, []);
+  const onMouseMove = useCallback(
+    (e) => {
+      const w = getWorldFromMouse(e);
+      if (w) setMouseWorld(w);
 
-  const onMouseUp = useCallback(() => {
+      // Pick drag — update arrow direction
+      if (pickMode && pickDragRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dx = mx - pickDragRef.current.screenX;
+        const dy = my - pickDragRef.current.screenY;
+        const yaw = Math.atan2(-dy, dx); // Y flipped for screen coords → world yaw
+        setPickArrow({
+          sx: pickDragRef.current.screenX,
+          sy: pickDragRef.current.screenY,
+          ex: mx,
+          ey: my,
+          yaw,
+        });
+        return;
+      }
+
+      // Normal pan
+      if (dragRef.current.dragging) {
+        setTransform((t) => ({
+          ...t,
+          x: e.clientX - dragRef.current.startX,
+          y: e.clientY - dragRef.current.startY,
+        }));
+      }
+    },
+    [getWorldFromMouse, pickMode]
+  );
+
+  const onMouseUp = useCallback(
+    (e) => {
+      if (pickMode && pickDragRef.current) {
+        const pd = pickDragRef.current;
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dx = mx - pd.screenX;
+        const dy = my - pd.screenY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // If barely dragged, yaw = 0; otherwise compute from drag direction
+        const yaw = dist > 8 ? Math.atan2(-dy, dx) : 0;
+
+        pickDragRef.current = null;
+        setPickArrow(null);
+
+        if (onPickPosition) {
+          onPickPosition({ x: pd.worldX, y: pd.worldY, yaw });
+        }
+        return;
+      }
+
+      dragRef.current.dragging = false;
+    },
+    [pickMode, onPickPosition]
+  );
+
+  const onMouseLeave = useCallback(() => {
     dragRef.current.dragging = false;
+    if (pickDragRef.current) {
+      pickDragRef.current = null;
+      setPickArrow(null);
+    }
+    setMouseWorld(null);
   }, []);
 
   // Zoom
@@ -196,56 +353,47 @@ export default function MapCanvas({ missionState, sendCommand }) {
     }));
   }, []);
 
-  // Click to navigate
+  // Double click to navigate (only when NOT in pick mode)
   const onDblClick = useCallback(
     (e) => {
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-
-      // Reverse the canvas transform
-      const px =
-        (cx - (transform.x + canvas.width / 2)) / transform.scale +
-        MAP_META.width / 2;
-      const py =
-        (cy - (transform.y + canvas.height / 2)) / transform.scale +
-        MAP_META.height / 2;
-
-      const [wx, wy] = pixelToWorld(px, py);
+      if (pickMode) return;
+      const w = getWorldFromMouse(e);
+      if (!w) return;
       sendCommand({
         action: "navigate_to",
-        x: Math.round(wx * 100) / 100,
-        y: Math.round(wy * 100) / 100,
+        x: w.x,
+        y: w.y,
         yaw: 0,
-        name: `(${wx.toFixed(1)}, ${wy.toFixed(1)})`,
+        name: `(${w.x.toFixed(1)}, ${w.y.toFixed(1)})`,
       });
     },
-    [transform, sendCommand]
+    [getWorldFromMouse, sendCommand, pickMode]
   );
 
   return (
     <div className="map-area" ref={containerRef}>
       <canvas
         ref={canvasRef}
-        className="map-canvas"
+        className={`map-canvas ${pickMode ? "map-canvas--picking" : ""}`}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onMouseLeave={onMouseLeave}
         onWheel={onWheel}
         onDoubleClick={onDblClick}
       />
+      {mouseWorld && (
+        <div className="map-coords">
+          x: {mouseWorld.x.toFixed(2)} &nbsp; y: {mouseWorld.y.toFixed(2)}
+        </div>
+      )}
+      {pickMode && (
+        <div className="map-pick-banner">📍 Click &amp; drag to set position + heading</div>
+      )}
       <div className="map-overlay">
-        <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(4, t.scale + 0.2) }))}>
-          +
-        </button>
-        <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.2, t.scale - 0.2) }))}>
-          −
-        </button>
-        <button className="btn btn--sm btn--icon" onClick={() => setTransform({ x: 0, y: 0, scale: 0.8 })}>
-          ⟲
-        </button>
+        <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(4, t.scale + 0.2) }))}>+</button>
+        <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.2, t.scale - 0.2) }))}>−</button>
+        <button className="btn btn--sm btn--icon" onClick={() => setTransform({ x: 0, y: 0, scale: 0.8 })}>⟲</button>
       </div>
     </div>
   );
