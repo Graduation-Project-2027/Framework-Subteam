@@ -134,7 +134,7 @@ def generate_launch_description():
         parameters=[
             {
                 "robot_description": Command(
-                    ["xacro", " ", urdf_file_single, " use_gazebo:=true"]
+                    ["xacro '", urdf_file_single, "' use_gazebo:=true"]
                 ),
                 "use_sim_time": True,
             },
@@ -161,7 +161,7 @@ def generate_launch_description():
         parameters=[
             {
                 "robot_description": Command(
-                    ["xacro", " ", urdf_file_2_lidars, " use_gazebo:=true"]
+                    ["xacro '", urdf_file_2_lidars, "' use_gazebo:=true"]
                 ),
                 "use_sim_time": True,
             },
@@ -188,7 +188,7 @@ def generate_launch_description():
         parameters=[
             {
                 "robot_description": Command(
-                    ["xacro", " ", urdf_file_override, " use_gazebo:=true"]
+                    ["xacro '", urdf_file_override, "' use_gazebo:=true"]
                 ),
                 "use_sim_time": True,
             },

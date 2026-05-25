@@ -25,6 +25,16 @@ This repository contains the simulation, robot description, bringup, and navigat
 - `agv_mapping`: laser processing and scan merger scripts
 - `agv_mission_control`: Web GUI and high-level task management
 
+## First-time setup (new PC or fresh clone)
+
+Install all system dependencies (ROS 2 packages, Node.js, etc.) in one step:
+
+```bash
+bash install_dependencies.sh
+```
+
+This handles everything: Nav2, SLAM Toolbox, robot_localization, Gazebo bridge, mission control GUI, and more. You only need to run this once per machine.
+
 ## Quick start
 
 ```bash

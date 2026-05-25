@@ -5,11 +5,20 @@
  */
 import { useState } from "react";
 
-export default function LocationEditor({ missionState, sendCommand, onPickFromMap }) {
+export default function LocationEditor({
+  missionState,
+  sendCommand,
+  onPickFromMap,
+  onStartLaneDraft,
+  laneDraftActive,
+  onFinishLaneDraft,
+  onCancelLaneDraft,
+  onDeleteLane,
+}) {
   const [editModal, setEditModal] = useState(null);
   const [dockModal, setDockModal] = useState(false);
 
-  const locations = missionState.locations || { racks: [], drop_zones: [], dock: {} };
+  const locations = missionState.locations || { racks: [], drop_zones: [], dock: {}, lanes: [] };
 
   const handleSave = (type, index, data) => {
     const updated = { ...locations };
@@ -39,12 +48,26 @@ export default function LocationEditor({ missionState, sendCommand, onPickFromMa
       <div className="panel__header">
         <span className="panel__title">📍 Locations</span>
         <div style={{ display: "flex", gap: 4 }}>
-          <button className="btn btn--sm" onClick={() => setEditModal({ type: "racks", index: -1, data: { name: "", x: 0, y: 0, yaw: 0 } })}>
+          <button className="btn btn--sm" onClick={() => setEditModal({ type: "racks", index: -1, data: { name: "", x: 0, y: 0, yaw: 0, state: "occupied" } })}>
             + Rack
           </button>
-          <button className="btn btn--sm" onClick={() => setEditModal({ type: "drop_zones", index: -1, data: { name: "", x: 0, y: 0, yaw: 0 } })}>
+          <button className="btn btn--sm" onClick={() => setEditModal({ type: "drop_zones", index: -1, data: { name: "", x: 0, y: 0, yaw: 0, state: "free" } })}>
             + Zone
           </button>
+          <button
+            className={`btn btn--sm ${laneDraftActive ? "btn--primary" : ""}`}
+            onClick={() => {
+              if (laneDraftActive) onFinishLaneDraft?.();
+              else onStartLaneDraft?.();
+            }}
+          >
+            {laneDraftActive ? "✓ Finish" : "+ Lane"}
+          </button>
+          {laneDraftActive && (
+            <button className="btn btn--sm btn--danger" onClick={() => onCancelLaneDraft?.()}>
+              ✕
+            </button>
+          )}
         </div>
       </div>
       <div className="panel__body">
@@ -90,7 +113,30 @@ export default function LocationEditor({ missionState, sendCommand, onPickFromMa
           </div>
         ))}
 
-        {locations.racks?.length === 0 && locations.drop_zones?.length === 0 && (
+        {/* Lanes */}
+        {(locations.lanes || []).map((lane) => (
+          <div key={lane.id} className="location-item">
+            <span
+              className="location-item__dot"
+              style={{ background: "#06b6d4" }}
+            />
+            <span className="location-item__name">
+              {lane.name || lane.id}
+            </span>
+            <span className="location-item__coords">
+              {lane.points?.length || 0} pts
+            </span>
+            <button
+              className="btn btn--sm btn--danger btn--icon"
+              onClick={() => onDeleteLane?.(lane.id)}
+              style={{ marginLeft: 4, padding: "2px 6px", fontSize: 10 }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+
+        {locations.racks?.length === 0 && locations.drop_zones?.length === 0 && (locations.lanes?.length || 0) === 0 && (
           <div className="empty-state">
             <div className="empty-state__icon">📦</div>
             <span>No locations defined yet</span>
@@ -212,6 +258,30 @@ function EditModal({ title, data, onSave, onCancel, onPickFromMap }) {
             />
           </div>
         </div>
+        {/* State toggle — only relevant for racks/zones (not the dock) */}
+        {("state" in form || form.state !== undefined) && (
+          <div className="modal__field">
+            <label className="modal__label">State</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className={`btn btn--sm ${(form.state || "occupied") === "occupied" ? "btn--danger" : ""}`}
+                onClick={() => setForm({ ...form, state: "occupied" })}
+                style={{ flex: 1 }}
+              >
+                🟥 Occupied
+              </button>
+              <button
+                type="button"
+                className={`btn btn--sm ${form.state === "free" ? "btn--primary" : ""}`}
+                onClick={() => setForm({ ...form, state: "free" })}
+                style={{ flex: 1 }}
+              >
+                🟩 Free
+              </button>
+            </div>
+          </div>
+        )}
         <div className="modal__actions">
           <button className="btn" onClick={onCancel}>Cancel</button>
           <button className="btn btn--primary" onClick={() => onSave(form)}>Save</button>

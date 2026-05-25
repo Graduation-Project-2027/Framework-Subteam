@@ -1,0 +1,88 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Mission Manager Parameters
+# ═══════════════════════════════════════════════════════════════════════
+mission_manager:
+  ros__parameters:
+
+    # ── Robot footprint (polygon string, same format as Nav2 costmap) ──
+    footprint_robot: "[[0.35, 0.32], [0.35, -0.32], [-0.35, -0.32], [-0.35, 0.32]]"
+    # Robot + rack — MUST encompass the actual rack (0.95m) plus margin,
+    # otherwise Nav2 plans through gaps the physical rack can't fit through.
+    # 1.05m × 1.05m gives ~5cm safety margin around the rack.
+    footprint_carrying: "[[-0.525, -0.525], [-0.525, 0.525], [0.525, 0.525], [0.525, -0.525]]"
+
+    # ── Scan topics (used for rack-leg detection) ─────────────────────
+    scan_topics:
+      - "/scan_front_filtered"
+      - "/scan_rear_filtered"
+
+    # ── Rack geometry ─────────────────────────────────────────────────
+    # Side length of the rack (distance between adjacent legs)
+    rack_side_length: 0.95
+    # Validation tolerances for leg-pattern matching
+    rack_side_min: 0.60       # min acceptable side distance
+    rack_side_max: 1.30       # max acceptable side distance
+    rack_diag_min: 1.00       # min acceptable diagonal distance
+    rack_diag_max: 1.70       # max acceptable diagonal distance
+
+    # ── Rack-leg detection (lidar) ────────────────────────────────────
+    # Range filter: only consider scan points within this band (meters)
+    leg_detect_range_min: 0.15
+    leg_detect_range_max: 1.2
+    # Distance filter: only keep points within this distance from robot center
+    leg_detect_dist_min: 0.15
+    leg_detect_dist_max: 0.95
+    # Clustering: max distance to merge nearby scan points into one cluster
+    leg_cluster_max_dist: 0.12
+
+    # ── Centering (servo loop under rack) ─────────────────────────────
+    centering_tolerance: 0.05       # stop when offset < this (meters)
+    centering_speed: 0.15           # max creep speed (m/s)
+    centering_max_iterations: 200   # max iterations (at 10Hz → 20s timeout)
+    centering_detection_timeout: 30 # switch to fallback after this many failures
+
+    # ── Centering rotation (sweep lidars when detection stalls) ─────
+    centering_rotate_after_fails: 8   # rotate after this many consecutive failures
+    centering_rotate_speed: 0.3       # rotation speed (rad/s) during sweep
+
+    # ── Crawl & staging (straight-line moves without Nav2) ──────────
+    # Nav2 navigates to a staging point in the aisle, then the robot
+    # crawls forward into the rack slot and reverses back out.
+    # The rack's yaw defines which side the aisle is on.
+    crawl_speed: 0.12
+
+    # Pickup: empty footprint (0.70 m), short hop. Just past the near
+    # rack legs so the staging point lands in the aisle, not inside
+    # a neighbouring rack in dense layouts.
+    pickup_approach_distance: 0.55
+
+    # Carrying: bigger footprint (1.05 m) needs more clearance so it
+    # ends up fully outside neighbouring rack legs' inflation zones
+    # after extraction (otherwise Nav2 can't plan from there).
+    carrying_approach_distance: 1.20
+
+    # ── Inflation radius profiles ─────────────────────────────────────
+    # Three modes, switched dynamically during a transport:
+    #   - normal: default for general (idle / navigate-only) use
+    #   - pickup: medium — used for empty-footprint approach, pulls path
+    #             to the centerline of rack rows so legs aren't clipped
+    #   - carrying: low — needed so the larger carrying footprint can
+    #               still find paths through the warehouse
+    inflation_radius_normal: 0.55
+    inflation_radius_pickup: 0.40
+    inflation_radius_carrying: 0.25
+
+    # ── Transport task timing ─────────────────────────────────────────
+    lift_height: 1.0          # lift target height
+    lift_wait_time: 3.0       # seconds to wait after sending lift command
+    costmap_settle_time: 1.0  # seconds to wait after carrying mode switch
+    drop_wait_time: 2.0       # seconds to wait after sending drop command
+
+    # ── Speed ─────────────────────────────────────────────────────────
+    default_speed: 0.4        # default max speed multiplier (m/s)
+    teleop_linear_scale: 0.4  # base linear speed for teleop buttons
+    teleop_angular_scale: 0.8 # base angular speed for teleop buttons
+
+    # ── Navigation ────────────────────────────────────────────────────
+    nav_goal_timeout: 10.0    # seconds to wait for Nav2 goal acceptance
+    nav_poll_rate: 0.05       # seconds between polling for nav result

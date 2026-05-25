@@ -90,7 +90,8 @@ function SpeedControl({ sendCommand }) {
 /* ── Main App ──────────────────────────────────────────────────────── */
 function AppInner() {
   const { connected, missionState, feedbackLog, sendCommand } = useROS();
-  const [pickMode, setPickMode] = useState(null); // null | { type, index, field }
+  const [pickMode, setPickMode] = useState(null); // null | { active, callback }
+  const [laneDraft, setLaneDraft] = useState(null); // null | { points: [{x,y}, ...] }
 
   // Null-safe destructuring of mission state
   const robotPose = missionState?.robot_pose || { x: 0, y: 0, yaw: 0 };
@@ -101,7 +102,6 @@ function AppInner() {
 
   const handlePickPosition = useCallback((pos) => {
     if (!pickMode) return;
-    // Callback into the LocationEditor's pending edit
     if (pickMode.callback) {
       pickMode.callback(pos);
     }
@@ -112,12 +112,53 @@ function AppInner() {
     setPickMode({ active: true, callback });
   }, []);
 
+  // ── Lane drawing ──────────────────────────────────────────────────
+  const startLaneDraft = useCallback(() => {
+    setLaneDraft({ points: [] });
+  }, []);
+
+  const addLanePoint = useCallback((x, y) => {
+    setLaneDraft((d) => (d ? { ...d, points: [...d.points, { x, y }] } : d));
+  }, []);
+
+  const finishLaneDraft = useCallback(() => {
+    setLaneDraft((d) => {
+      if (d && d.points.length >= 2) {
+        const existing = missionState?.locations?.lanes || [];
+        const newLane = {
+          id: `lane_${Date.now()}`,
+          name: `Lane ${existing.length + 1}`,
+          points: d.points,
+        };
+        sendCommand({ action: "update_lanes", lanes: [...existing, newLane] });
+      }
+      return null;
+    });
+  }, [missionState, sendCommand]);
+
+  const cancelLaneDraft = useCallback(() => setLaneDraft(null), []);
+
+  const deleteLane = useCallback((laneId) => {
+    const remaining = (missionState?.locations?.lanes || [])
+      .filter((l) => l.id !== laneId);
+    sendCommand({ action: "update_lanes", lanes: remaining });
+  }, [missionState, sendCommand]);
+
   return (
     <div className="app">
       <Header missionState={missionState} connected={connected} sendCommand={sendCommand} />
 
       <div className="sidebar-left">
-        <LocationEditor missionState={missionState} sendCommand={sendCommand} onPickFromMap={startPickMode} />
+        <LocationEditor
+          missionState={missionState}
+          sendCommand={sendCommand}
+          onPickFromMap={startPickMode}
+          onStartLaneDraft={startLaneDraft}
+          laneDraftActive={!!laneDraft}
+          onFinishLaneDraft={finishLaneDraft}
+          onCancelLaneDraft={cancelLaneDraft}
+          onDeleteLane={deleteLane}
+        />
         <TaskQueue missionState={missionState} sendCommand={sendCommand} />
       </div>
 
@@ -126,6 +167,9 @@ function AppInner() {
         sendCommand={sendCommand}
         pickMode={!!pickMode}
         onPickPosition={handlePickPosition}
+        laneDraft={laneDraft}
+        onAddLanePoint={addLanePoint}
+        onFinishLaneDraft={finishLaneDraft}
       />
 
       <div className="sidebar-right panel">

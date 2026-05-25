@@ -76,6 +76,7 @@
       rpy_offset="0 0 0"
       mesh_xyz_offset="0 0 0"
       mesh_rpy_offset="0 0 0"
+      min_range="0.12"
       topic_name="scan"/>
 
     <!-- mirrored rear lidar -->
@@ -87,6 +88,7 @@
       rpy_offset="0 0 ${pi}"
       mesh_xyz_offset="0 0 0"
       mesh_rpy_offset="0 0 0"
+      min_range="0.12"
       topic_name="scan_rear"/>
 
     <!-- imu -->

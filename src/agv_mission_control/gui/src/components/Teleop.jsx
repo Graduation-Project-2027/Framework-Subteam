@@ -45,6 +45,10 @@ export default function Teleop({ sendCommand }) {
   // Keyboard listeners
   useEffect(() => {
     const down = (e) => {
+      // Don't capture keys when user is typing in an input field
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
       const k = e.key.toLowerCase();
       if (["w", "a", "s", "d", "q", "e"].includes(k)) {
         e.preventDefault();
@@ -56,6 +60,9 @@ export default function Teleop({ sendCommand }) {
       }
     };
     const up = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
       const k = e.key.toLowerCase();
       if (["w", "a", "s", "d", "q", "e"].includes(k)) {
         setActiveKeys((prev) => {

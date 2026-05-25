@@ -32,12 +32,25 @@ Treat the `2_lidars` mode as the standard experimental setup. Baseline single li
 
 ---
 
-## 2) Environment setup (every new terminal)
+## 2) First-time dependency install (once per machine)
+
+If this is a fresh PC or fresh clone, install all system dependencies first:
+
+```bash
+cd /path/to/Framework-Subteam
+bash install_dependencies.sh
+```
+
+This installs all required ROS 2 packages (Nav2, SLAM Toolbox, robot_localization, Gazebo bridge, laser_filters, rosbridge, etc.), Node.js, GUI npm dependencies, and cleans any stale build artifacts. You only need to run this **once per machine**.
+
+---
+
+## 3) Environment setup (every new terminal)
 
 Go to workspace root:
 
 ```bash
-cd /home/user/Framework-Subteam
+cd /path/to/Framework-Subteam
 ```
 
 Build once after updates:
@@ -85,7 +98,7 @@ Use this 2-terminal flow for reliable simulation + manual control.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/user/Framework-Subteam/install/setup.bash
+source <workspace>/install/setup.bash
 
 ros2 launch agv_bringup agv_gazebo.launch.py \
   mode:=single \
@@ -97,7 +110,7 @@ ros2 launch agv_bringup agv_gazebo.launch.py \
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/user/Framework-Subteam/install/setup.bash
+source <workspace>/install/setup.bash
 
 ros2 run agv_bringup rich_teleop_tui
 ```
@@ -291,7 +304,7 @@ Re-source environment in that terminal:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/user/Framework-Subteam/install/setup.bash
+source <workspace>/install/setup.bash
 ```
 
 ---

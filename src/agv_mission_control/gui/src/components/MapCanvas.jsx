@@ -24,7 +24,15 @@ function pixelToWorld(px, py) {
   return [wx, wy];
 }
 
-export default function MapCanvas({ missionState, sendCommand, onPickPosition, pickMode }) {
+export default function MapCanvas({
+  missionState,
+  sendCommand,
+  onPickPosition,
+  pickMode,
+  laneDraft,
+  onAddLanePoint,
+  onFinishLaneDraft,
+}) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -107,6 +115,76 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
     // Map image
     ctx.drawImage(imgRef.current, 0, 0);
 
+    // ── Lanes (drawn first, under everything else) ─────────────────
+    const drawLanePoly = (points, opts) => {
+      if (!points || points.length === 0) return;
+      ctx.save();
+      // White halo behind the line so it stays visible against any map background
+      if (opts.halo) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = (opts.lineWidth || 2) + 4;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        points.forEach((p, i) => {
+          const [px, py] = worldToPixel(p.x, p.y);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.strokeStyle = opts.stroke;
+      ctx.fillStyle = opts.fill;
+      ctx.lineWidth = opts.lineWidth || 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.setLineDash(opts.dash || []);
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const [px, py] = worldToPixel(p.x, p.y);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Vertex dots with white outline
+      points.forEach((p) => {
+        const [px, py] = worldToPixel(p.x, p.y);
+        ctx.beginPath();
+        ctx.arc(px, py, (opts.dotRadius || 4) + 1, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px, py, opts.dotRadius || 4, 0, Math.PI * 2);
+        ctx.fillStyle = opts.fill;
+        ctx.fill();
+      });
+      ctx.restore();
+    };
+
+    (missionState.locations?.lanes || []).forEach((lane) => {
+      drawLanePoly(lane.points, {
+        stroke: "#06b6d4",
+        fill: "#06b6d4",
+        lineWidth: 5,
+        dotRadius: 5,
+        halo: true,
+      });
+    });
+
+    if (laneDraft && laneDraft.points.length > 0) {
+      drawLanePoly(laneDraft.points, {
+        stroke: "#f59e0b",
+        fill: "#f59e0b",
+        lineWidth: 5,
+        dotRadius: 6,
+        dash: [6, 4],
+        halo: true,
+      });
+    }
+
     // Dock marker
     const dock = missionState.locations?.dock;
     if (dock && dock.x !== undefined) {
@@ -131,39 +209,41 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
       ctx.restore();
     }
 
-    // Rack markers
-    const racks = missionState.locations?.racks || [];
-    racks.forEach((rack) => {
-      const [rx, ry] = worldToPixel(rack.x, rack.y);
+    // Rack-square renderer — draws a 0.95m × 0.95m oriented square
+    // coloured by state (green = free, red = occupied).  This is what
+    // Nav2 sees as obstacles when "occupied" via the /rack_obstacles topic.
+    const RACK_HALF_PX = (0.95 / 2) / MAP_META.resolution; // ≈ 9.5px
+    const drawRackSquare = (loc, kind) => {
+      const [px, py] = worldToPixel(loc.x, loc.y);
+      const yaw = -(loc.yaw || 0); // canvas y is flipped
+      const occupied = (loc.state || (kind === "rack" ? "occupied" : "free")) === "occupied";
       ctx.save();
-      ctx.translate(rx, ry);
-      ctx.fillStyle = "#8b5cf6";
+      ctx.translate(px, py);
+      ctx.rotate(yaw);
+      // Filled square + border
+      ctx.fillStyle = occupied ? "rgba(239, 68, 68, 0.35)" : "rgba(34, 197, 94, 0.30)";
+      ctx.strokeStyle = occupied ? "#ef4444" : "#22c55e";
+      ctx.lineWidth = 2;
+      ctx.fillRect(-RACK_HALF_PX, -RACK_HALF_PX, RACK_HALF_PX * 2, RACK_HALF_PX * 2);
+      ctx.strokeRect(-RACK_HALF_PX, -RACK_HALF_PX, RACK_HALF_PX * 2, RACK_HALF_PX * 2);
+      // Heading tick (which way Nav2 will face when it arrives)
       ctx.beginPath();
-      ctx.arc(0, 0, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(RACK_HALF_PX, 0);
+      ctx.stroke();
+      ctx.restore();
+      // Label (un-rotated)
+      ctx.save();
+      ctx.translate(px, py);
       ctx.fillStyle = "#e2e8f0";
       ctx.font = "bold 10px Inter";
       ctx.textAlign = "center";
-      ctx.fillText(rack.name || rack.id, 0, -14);
+      ctx.fillText(loc.name || loc.id, 0, -RACK_HALF_PX - 6);
       ctx.restore();
-    });
+    };
 
-    // Drop zones
-    const zones = missionState.locations?.drop_zones || [];
-    zones.forEach((zone) => {
-      const [zx, zy] = worldToPixel(zone.x, zone.y);
-      ctx.save();
-      ctx.translate(zx, zy);
-      ctx.fillStyle = "#10b981";
-      ctx.beginPath();
-      ctx.rect(-6, -6, 12, 12);
-      ctx.fill();
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font = "bold 10px Inter";
-      ctx.textAlign = "center";
-      ctx.fillText(zone.name || zone.id, 0, -14);
-      ctx.restore();
-    });
+    (missionState.locations?.racks || []).forEach((r) => drawRackSquare(r, "rack"));
+    (missionState.locations?.drop_zones || []).forEach((z) => drawRackSquare(z, "zone"));
 
     // Robot pose
     const pose = missionState.robot_pose;
@@ -235,7 +315,7 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
       );
       ctx.restore();
     }
-  }, [loaded, missionState, transform, pickArrow]);
+  }, [loaded, missionState, transform, pickArrow, laneDraft]);
 
   // Resize handler
   useEffect(() => {
@@ -255,6 +335,13 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
     (e) => {
       if (e.button !== 0) return;
 
+      // Lane drawing: each click adds a vertex
+      if (laneDraft) {
+        const w = getWorldFromMouse(e);
+        if (w && onAddLanePoint) onAddLanePoint(w.x, w.y);
+        return;
+      }
+
       if (pickMode) {
         // Start pick: record click position
         const mp = getMapPixelFromMouse(e);
@@ -270,7 +357,7 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
       // Normal pan
       dragRef.current = { dragging: true, startX: e.clientX - transform.x, startY: e.clientY - transform.y };
     },
-    [pickMode, transform, getMapPixelFromMouse, getWorldFromMouse, mapPxToScreen]
+    [pickMode, laneDraft, onAddLanePoint, transform, getMapPixelFromMouse, getWorldFromMouse, mapPxToScreen]
   );
 
   const onMouseMove = useCallback(
@@ -353,9 +440,48 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
     }));
   }, []);
 
-  // Double click to navigate (only when NOT in pick mode)
+  // Right-click toggles the state of the rack/zone under the cursor.
+  // Free ↔ occupied — the mission_manager republishes /rack_obstacles
+  // and Nav2 picks up the change on its next costmap update.
+  const onContextMenu = useCallback(
+    (e) => {
+      e.preventDefault();
+      const w = getWorldFromMouse(e);
+      if (!w) return;
+      const half = 0.95 / 2;
+      const all = [
+        ...(missionState.locations?.racks || []),
+        ...(missionState.locations?.drop_zones || []),
+      ];
+      // Find the location whose square contains the click point (in its local frame).
+      let hit = null;
+      for (const loc of all) {
+        const yaw = loc.yaw || 0;
+        const dx = w.x - loc.x;
+        const dy = w.y - loc.y;
+        const lx = dx * Math.cos(-yaw) - dy * Math.sin(-yaw);
+        const ly = dx * Math.sin(-yaw) + dy * Math.cos(-yaw);
+        if (Math.abs(lx) <= half && Math.abs(ly) <= half) {
+          hit = loc;
+          break;
+        }
+      }
+      if (!hit) return;
+      const next = (hit.state || "occupied") === "occupied" ? "free" : "occupied";
+      sendCommand({ action: "set_location_state", id: hit.id, state: next });
+    },
+    [getWorldFromMouse, missionState.locations, sendCommand]
+  );
+
+  // Double click to navigate, or finish lane draft if drawing
   const onDblClick = useCallback(
     (e) => {
+      if (laneDraft) {
+        // The first mousedown of the double-click already added a point;
+        // commit the polyline now.
+        if (onFinishLaneDraft) onFinishLaneDraft();
+        return;
+      }
       if (pickMode) return;
       const w = getWorldFromMouse(e);
       if (!w) return;
@@ -367,7 +493,7 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
         name: `(${w.x.toFixed(1)}, ${w.y.toFixed(1)})`,
       });
     },
-    [getWorldFromMouse, sendCommand, pickMode]
+    [getWorldFromMouse, sendCommand, pickMode, laneDraft, onFinishLaneDraft]
   );
 
   return (
@@ -381,6 +507,7 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
         onMouseLeave={onMouseLeave}
         onWheel={onWheel}
         onDoubleClick={onDblClick}
+        onContextMenu={onContextMenu}
       />
       {mouseWorld && (
         <div className="map-coords">
@@ -389,6 +516,12 @@ export default function MapCanvas({ missionState, sendCommand, onPickPosition, p
       )}
       {pickMode && (
         <div className="map-pick-banner">📍 Click &amp; drag to set position + heading</div>
+      )}
+      {laneDraft && (
+        <div className="map-pick-banner">
+          🛣 Lane drawing — click to add points ({laneDraft.points.length}),
+          double-click to finish
+        </div>
       )}
       <div className="map-overlay">
         <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(4, t.scale + 0.2) }))}>+</button>

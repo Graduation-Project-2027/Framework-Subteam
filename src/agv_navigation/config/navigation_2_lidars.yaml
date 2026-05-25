@@ -4,7 +4,7 @@ bt_navigator:
     robot_base_frame: base_footprint
     odom_topic: /odometry/filtered
     bt_loop_duration: 10
-    default_server_timeout: 20
+    default_server_timeout: 120
     wait_for_service_timeout: 1000
     action_server_result_timeout: 900.0
     navigators: ["navigate_to_pose", "navigate_through_poses"]
@@ -19,7 +19,7 @@ bt_navigator:
 
 controller_server:
   ros__parameters:
-    controller_frequency: 20.0
+    controller_frequency: 10.0
     costmap_update_timeout: 0.30
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
@@ -37,8 +37,12 @@ controller_server:
     general_goal_checker:
       stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.20
+      # Tighter tolerances so the robot actually reaches staging points
+      # under racks/drops accurately.  At 0.25 m the closed-loop crawl
+      # could not always close the gap because Nav2 would declare
+      # success while still well short of the goal.
+      xy_goal_tolerance: 0.08
+      yaw_goal_tolerance: 0.10
     FollowPathDWB:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
@@ -81,8 +85,8 @@ controller_server:
       publish_cost_grid_pc: True
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 56
-      model_dt: 0.05
+      time_steps: 28
+      model_dt: 0.1
       batch_size: 1000
       ax_max: 2.5
       ax_min: -2.5
@@ -202,7 +206,7 @@ local_costmap:
         z_voxels: 16
         max_obstacle_height: 2.0
         mark_threshold: 0
-        observation_sources: scan_front scan_rear
+        observation_sources: scan_front scan_rear rack_obstacles
         scan_front:
           topic: /scan_front_filtered
           max_obstacle_height: 2.0
@@ -222,6 +226,16 @@ local_costmap:
           raytrace_max_range: 3.0
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+        # Dynamic rack obstacles (published by mission_manager).
+        # marking only — clearing is driven by the mission state, not raytracing.
+        rack_obstacles:
+          topic: /rack_obstacles
+          max_obstacle_height: 2.0
+          clearing: False
+          marking: True
+          data_type: "PointCloud2"
+          obstacle_max_range: 100.0
           obstacle_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -243,7 +257,7 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
-        observation_sources: scan_front scan_rear
+        observation_sources: scan_front scan_rear rack_obstacles
         scan_front:
           topic: /scan_front_filtered
           max_obstacle_height: 2.0
@@ -264,13 +278,21 @@ global_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
           obstacle_min_range: 0.0
+        rack_obstacles:
+          topic: /rack_obstacles
+          max_obstacle_height: 2.0
+          clearing: False
+          marking: True
+          data_type: "PointCloud2"
+          obstacle_max_range: 100.0
+          obstacle_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 1.5
-        inflation_radius: 0.50
+        inflation_radius: 0.55
       always_send_full_costmap: True
 
 planner_server:

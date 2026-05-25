@@ -24,16 +24,20 @@ def generate_launch_description():
         # Fallback to local path relative to current working directory
         gui_src_path = os.path.abspath("src/agv_mission_control/gui")
 
-    locations_file = os.path.join(pkg, "config", "locations.json")
-
+    # Empty default → mission_manager uses ~/.ros/agv_locations.json,
+    # which survives colcon rebuilds.  The install-copy version of
+    # config/locations.json was getting clobbered every build, wiping
+    # any GUI-saved lanes/racks.  Pass an explicit path if you want
+    # to override.
     return LaunchDescription([
         DeclareLaunchArgument(
             "use_sim_time", default_value="true",
             description="Use simulation clock",
         ),
         DeclareLaunchArgument(
-            "locations_file", default_value=locations_file,
-            description="Path to rack/dock locations JSON",
+            "locations_file", default_value="",
+            description="Path to rack/dock locations JSON "
+                        "(empty → ~/.ros/agv_locations.json)",
         ),
         DeclareLaunchArgument(
             "rosbridge_port", default_value="9090",
@@ -54,10 +58,13 @@ def generate_launch_description():
             executable="mission_manager",
             name="mission_manager",
             output="screen",
-            parameters=[{
-                "use_sim_time": LaunchConfiguration("use_sim_time"),
-                "locations_file": LaunchConfiguration("locations_file"),
-            }],
+            parameters=[
+                os.path.join(pkg, "config", "mission_manager.yaml"),
+                {
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                    "locations_file": LaunchConfiguration("locations_file"),
+                },
+            ],
         ),
 
         # ── Rosbridge WebSocket ──────────────────────────────────────
