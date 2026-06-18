@@ -92,6 +92,25 @@ def generate_launch_description():
         executable="scan_merger.py",
         name="scan_merger",
         output="screen",
+        # Merge the PAYLOAD-FILTERED scans so SLAM's matcher never sees the
+        # carried rack legs (otherwise they get baked into the map as ghost
+        # static obstacles that later fail navigation).
+        parameters=[{
+            "use_sim_time": use_sim_time,
+            "front_topic": "/scan_front_nav",
+            "rear_topic": "/scan_rear_nav",
+        }],
+        condition=LaunchConfigurationEquals("mode", "2_lidars"),
+    )
+
+    # Carried-payload self-filter: removes the lifted rack's legs from the
+    # scans the costmap AND slam consume, so the robot doesn't cage itself.
+    # Pure pass-through (filtered → _nav) until carrying.
+    payload_filter = Node(
+        package="agv_mapping",
+        executable="payload_filter.py",
+        name="payload_filter",
+        output="screen",
         parameters=[{"use_sim_time": use_sim_time}],
         condition=LaunchConfigurationEquals("mode", "2_lidars"),
     )
@@ -185,6 +204,7 @@ def generate_launch_description():
     ld.add_action(scan_filter_front)
     ld.add_action(scan_filter_rear)
     ld.add_action(scan_merger)
+    ld.add_action(payload_filter)
 
     # SLAM
     ld.add_action(slam_single)

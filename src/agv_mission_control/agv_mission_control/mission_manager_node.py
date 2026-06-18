@@ -33,8 +33,9 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
 import struct
 
-from std_msgs.msg import String, Float64, Header
+from std_msgs.msg import String, Float64, Header, Float32MultiArray
 from geometry_msgs.msg import Twist, PoseStamped
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan, PointCloud2, PointField
 from nav2_msgs.action import NavigateToPose
 from rcl_interfaces.srv import SetParameters
@@ -82,7 +83,17 @@ class MissionManagerNode(Node):
         self._robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
         self._speed_multiplier = self.p_default_speed
         self._carrying = False  # True when rack is lifted
+        # Id of the rack we're actively docking under (approach/centering).
+        # Excluded from /rack_obstacles so the planner doesn't treat the
+        # rack we're driving *under* as a lethal wall.
+        self._docking_target_id = None
         self._latest_scans = {}  # {topic: LaserScan}
+        # Latest measured body velocity (from EKF) for dock diagnostics.
+        self._odom_vel = (0.0, 0.0, 0.0)
+        # Carried-rack leg positions in base_footprint (captured at dock),
+        # broadcast to the payload_filter so the scanner ignores them while
+        # carrying.  Empty ⇒ not carrying.
+        self._payload_legs = []
         self._lock = Lock()
         self._paused = False
         self._cancel_requested = False
@@ -136,6 +147,11 @@ class MissionManagerNode(Node):
         self._rack_obs_pub = self.create_publisher(
             PointCloud2, "/rack_obstacles", rack_obs_qos)
 
+        # Carried-leg mask for the payload_filter (latched so the filter
+        # picks up the current state even if it (re)starts late).
+        self._payload_mask_pub = self.create_publisher(
+            Float32MultiArray, "/payload/leg_mask", rack_obs_qos)
+
         # ── TF for robot pose (map frame) ────────────────────────────
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
@@ -166,6 +182,12 @@ class MissionManagerNode(Node):
                 scan_qos, callback_group=self.cb_group,
             )
             self.get_logger().info(f"Subscribed to {topic} as '{tag}'")
+
+        # ── Odometry (measured velocity, for dock diagnostics) ───────
+        self.create_subscription(
+            Odometry, "/odometry/filtered", self._odom_cb, scan_qos,
+            callback_group=self.cb_group,
+        )
 
         # ── Costmap parameter clients (for dynamic footprint switch) ──
         self._local_costmap_param_cli = self.create_client(
@@ -235,10 +257,14 @@ class MissionManagerNode(Node):
         self.p_center_fail_n  = g("centering_detection_timeout", 30).integer_value
 
         # Transport timing
-        self.p_lift_height    = g("lift_height", 1.0).double_value
-        self.p_lift_wait      = g("lift_wait_time", 3.0).double_value
+        # lift_height matches the URDF lift_range so the position controller
+        # commands full travel without overshoot windup.
+        self.p_lift_height    = g("lift_height", 0.20).double_value
+        self.p_lift_wait      = g("lift_wait_time", 6.0).double_value
         self.p_settle_time    = g("costmap_settle_time", 1.0).double_value
-        self.p_drop_wait      = g("drop_wait_time", 2.0).double_value
+        # Let the rack fully lower and settle on the floor before the robot
+        # reverses out — otherwise it can drag the rack back with it.
+        self.p_drop_wait      = g("drop_wait_time", 5.0).double_value
 
         # Speed
         self.p_default_speed  = g("default_speed", 0.4).double_value
@@ -255,9 +281,12 @@ class MissionManagerNode(Node):
 
         # Crawl distances (straight-line moves without Nav2)
         self.p_crawl_speed      = g("crawl_speed", 0.12).double_value
-        # Pickup: short staging hop just past the rack's near legs,
-        #         keeps the staging point in the aisle.
-        self.p_pickup_approach  = g("pickup_approach_distance", 0.55).double_value
+        # Pickup: staging hop must sit fully OUTSIDE the rack footprint so
+        #         the robot's body doesn't overlap the near legs (which the
+        #         planner treats as lethal).  Needs to be at least
+        #         rack_half (~0.475) + robot_half_len (0.35) + margin.
+        #         The leg-servo dock controller closes the rest of the gap.
+        self.p_pickup_approach  = g("pickup_approach_distance", 1.35).double_value
         # Carrying: longer because the bigger footprint needs more
         #           clearance from static-map rack legs after extraction.
         self.p_carrying_approach = g("carrying_approach_distance", 1.20).double_value
@@ -270,8 +299,76 @@ class MissionManagerNode(Node):
         #   - carrying: low inflation so the larger carrying footprint can
         #               still find paths through the warehouse.
         self.p_inflation_normal   = g("inflation_radius_normal", 0.55).double_value
-        self.p_inflation_pickup   = g("inflation_radius_pickup", 0.40).double_value
+        # Low during the pickup approach: dock_servo (not Nav2) does the
+        # precise under-rack drive, so Nav2 must NOT be repelled by the rack
+        # legs its own lidar sees — otherwise it "fears" the staging point and
+        # creeps/stalls at the rack mouth.
+        self.p_inflation_pickup   = g("inflation_radius_pickup", 0.25).double_value
         self.p_inflation_carrying = g("inflation_radius_carrying", 0.25).double_value
+
+        # ── Closed-loop docking controller ───────────────────────────
+        # Robot half-extents (used to size staging so the footprint stops
+        # AT the near legs instead of overlapping them).
+        self.p_robot_half_len = g("robot_half_length", 0.35).double_value
+        self.p_robot_half_wid = g("robot_half_width", 0.32).double_value
+
+        # Leg-servo gains (proportional).  Errors are in metres / radians;
+        # outputs are clamped to the *_max velocities below.
+        self.p_dock_kx   = g("dock_gain_x", 0.9).double_value
+        self.p_dock_ky   = g("dock_gain_y", 1.1).double_value
+        self.p_dock_kth  = g("dock_gain_yaw", 1.4).double_value
+        self.p_dock_vx_max = g("dock_vx_max", 0.22).double_value
+        self.p_dock_vy_max = g("dock_vy_max", 0.18).double_value
+        self.p_dock_wz_max = g("dock_wz_max", 0.6).double_value
+        # Convergence tolerances (must hold for dock_converge_count cycles).
+        self.p_dock_pos_tol = g("dock_pos_tolerance", 0.03).double_value
+        self.p_dock_yaw_tol = g("dock_yaw_tolerance", 0.05).double_value
+        self.p_dock_converge_count = g("dock_converge_count", 4).integer_value
+        # Forward motion is gated by alignment: it fades (but never stops —
+        # see dock_vx_floor) as lateral/yaw error grows beyond tolerance, so
+        # the robot keeps creeping in while it squares up instead of
+        # stalling far back where only the near legs are visible.
+        self.p_dock_gate_y   = g("dock_gate_y", 0.20).double_value
+        self.p_dock_gate_yaw = g("dock_gate_yaw", 0.30).double_value
+        # Minimum forward fraction even when misaligned (guarantees progress
+        # into the rack, where detection geometry is best).
+        self.p_dock_vx_floor = g("dock_vx_floor", 0.30).double_value
+        # Servo loop rate, overall timeout, and how long detection may be
+        # lost before falling back to the stored map coordinates.
+        self.p_dock_rate = g("dock_rate_hz", 15.0).double_value
+        self.p_dock_timeout = g("dock_timeout", 90.0).double_value
+        self.p_dock_lost_timeout = g("dock_lost_timeout", 2.5).double_value
+        # Prior-guided leg matching: a detected cluster matches a predicted
+        # leg if within this gate; clusters farther than search_window from
+        # the predicted rack centre are ignored (rejects adjacent racks).
+        self.p_dock_match_gate = g("dock_leg_match_gate", 0.30).double_value
+        self.p_dock_search_window = g("dock_search_window", 0.95).double_value
+
+        # ── Closed-loop straight / point drives ──────────────────────
+        self.p_drive_kp = g("drive_gain", 1.4).double_value
+        self.p_drive_vmax = g("drive_vmax", 0.25).double_value
+        self.p_drive_vmin = g("drive_vmin", 0.04).double_value
+        self.p_drive_pos_tol = g("drive_pos_tolerance", 0.02).double_value
+        self.p_drive_yaw_tol = g("drive_yaw_tolerance", 0.03).double_value
+        self.p_drive_yaw_hold_k = g("drive_yaw_hold_gain", 1.2).double_value
+        self.p_drive_lat_hold_k = g("drive_lateral_hold_gain", 1.2).double_value
+        self.p_drive_rate = g("drive_rate_hz", 20.0).double_value
+        self.p_drive_timeout = g("drive_timeout", 45.0).double_value
+
+        # ── Stiction breakaway ───────────────────────────────────────
+        # When commanding motion but the measured (EKF) body speed stays
+        # near zero, the robot is caught (e.g. a momentary contact at the
+        # rack entrance).  After dock_stall_time of this, we punch the
+        # command up to dock_breakaway_v to break free, then resume normal
+        # control.  Uses the act_v we already measure — no manual push.
+        self.p_stall_speed_eps = g("stall_speed_eps", 0.03).double_value
+        self.p_stall_time      = g("stall_time", 0.6).double_value
+        self.p_breakaway_v     = g("breakaway_velocity", 0.45).double_value
+
+        # Extraction / retreat clearances.  Default = rack_half + robot_half
+        # + margin so the carried rack ends fully in the aisle.
+        self.p_extract_clearance = g("extract_clearance", 1.15).double_value
+        self.p_retreat_clearance = g("retreat_clearance", 1.15).double_value
 
         self.get_logger().info("Parameters loaded.")
 
@@ -664,16 +761,20 @@ class MissionManagerNode(Node):
         return (x - distance * math.cos(yaw), y - distance * math.sin(yaw))
 
     def _execute_transport(self, task):
-        """Transport: stage→crawl-in→center→lift→reverse-out → nav-stage→crawl-in→drop→reverse-out.
+        """Transport: stage → leg-servo dock → lift → extract → nav-stage →
+        insert → drop → retreat.
 
+        All final-approach moves are CLOSED-LOOP (no dead-reckoning):
+          - pickup centering  → _dock_servo (servo on the rack legs)
+          - extraction/retreat → _drive_straight_closed_loop (odom)
+          - drop insertion     → _drive_to_map_point (map localization)
         Reduced inflation is applied for the whole task so the planner can
         enter rack rows; restored on every exit path via try/finally.
-        Pickup uses a SHORT staging hop (aisle edge); carrying uses a
-        LONGER staging/extract distance (clears the bigger footprint).
         """
         src = task.get("from", {})
         dst = task.get("to", {})
-        spd = self.p_crawl_speed
+        src_yaw = src.get("yaw", 0.0) if src else 0.0
+        dst_yaw = dst.get("yaw", 0.0) if dst else 0.0
         pickup_d = self.p_pickup_approach
         carry_d  = self.p_carrying_approach
 
@@ -689,23 +790,23 @@ class MissionManagerNode(Node):
             return False
 
         # ── Tune inflation for the pickup approach ───────────────────
-        # 0.40m is high enough that paths get pulled to the centerline
-        # of rack rows but low enough that rack rows aren't walled off.
-        # _set_carrying_mode(True) lowers to p_inflation_carrying for
-        # navigating with the bigger footprint after lift.
         self._set_inflation(self.p_inflation_pickup)
         time.sleep(self.p_settle_time)
 
         try:
-            # ── Step 1: Navigate to PICKUP staging (aisle, short hop) ─
-            # Forces the approach to come from the rack's aisle side
-            # rather than wherever Nav2 finds cheapest.  The staging
-            # point sits just past the near rack legs (~0.55 m), so
-            # it lands in the aisle, not inside a neighbouring rack.
+            # ── Step 1: Navigate to PICKUP staging (aisle, outside legs) ─
+            # Staging now sits fully outside the rack footprint (≈0.95 m
+            # behind centre) so the robot body doesn't overlap the near
+            # legs — otherwise the planner refuses to approach.  The
+            # leg-servo dock closes the remaining gap.
             self._current_task_step = "navigating_to_rack"
             self._state = MissionState.NAVIGATING
             if src:
-                src_yaw = src.get("yaw", 0.0)
+                # Stop treating the rack we're about to drive UNDER as a
+                # lethal obstacle (its legs are still 'occupied').
+                self._docking_target_id = src.get("id")
+                self._publish_rack_obstacles()
+
                 stg_x, stg_y = self._staging_point(
                     src["x"], src["y"], src_yaw, pickup_d)
 
@@ -717,58 +818,19 @@ class MissionManagerNode(Node):
 
                 self._log(f"Navigating to pickup staging for "
                           f"{task.get('from_name', 'rack')}...")
-                ok = self._navigate_to(stg_x, stg_y, src_yaw)
-                if not ok:
+                if not self._navigate_to(stg_x, stg_y, src_yaw):
                     return False
 
             if self._cancel_requested or self._paused:
                 return False
 
-            # ── Step 1b: Crawl forward into the rack slot ────────────
-            # Closed-loop: read the robot's actual pose and compute the
-            # forward distance to the rack centre instead of crawling a
-            # fixed amount.  Nav2's xy_goal_tolerance (0.25 m) can leave
-            # the robot well short of the staging point, and a fixed
-            # crawl would inherit that error.
+            # ── Step 1b: Closed-loop leg-servo dock (in + centre + align)
             if src:
-                self._update_robot_pose()
-                rx = self._robot_pose["x"]
-                ry = self._robot_pose["y"]
-                yaw = self._robot_pose["yaw"]
-                dx = src["x"] - rx
-                dy = src["y"] - ry
-                forward_dist = dx * math.cos(yaw) + dy * math.sin(yaw)
-                lateral_off  = -dx * math.sin(yaw) + dy * math.cos(yaw)
-                # Cap at a safe upper bound — if Nav2 ended up way off
-                # we don't want to barrel through obstacles.  Centering
-                # will close any remaining gap.
-                max_crawl = pickup_d + 1.0
-                crawl_d = max(0.0, min(forward_dist, max_crawl))
-                self._log(
-                    f"  Distance to rack centre: forward {forward_dist:.2f} m, "
-                    f"lateral {lateral_off:.2f} m → crawling {crawl_d:.2f} m")
-                if crawl_d > 0.03:
-                    self._crawl(spd, 0.0, crawl_d,
-                                label="Crawling into rack slot")
-                else:
-                    self._log("  Skipping crawl — robot is already at/past rack centre.")
-
-            if self._cancel_requested or self._paused:
-                return False
-
-            # ── Step 1c: Precision centering under rack ──────────────
-            if src:
-                self._update_robot_pose()
-                rp = self._robot_pose
-                self._log(
-                    f"Centering under rack... "
-                    f"(robot at ({rp['x']:.2f}, {rp['y']:.2f}, "
-                    f"yaw={rp['yaw']:.2f}), target rack at "
-                    f"({src['x']:.2f}, {src['y']:.2f}))")
                 self._current_task_step = "centering"
-                if not self._center_under_rack(src["x"], src["y"]):
-                    self._log("ERROR: Centering failed — aborting task "
-                              "to avoid lifting without a rack underneath.")
+                if not self._dock_servo(src["x"], src["y"], src_yaw,
+                                        label=task.get("from_name", "rack")):
+                    self._log("ERROR: Docking failed — aborting task to "
+                              "avoid lifting without a rack underneath.")
                     return False
 
             # ── Step 2: Lift ─────────────────────────────────────────
@@ -782,70 +844,30 @@ class MissionManagerNode(Node):
             if src and src.get("id"):
                 self._set_location_state(src["id"], "free")
 
-            # Switch to carrying footprint
+            # Carrying now: legs are lifted out of the lidar plane.  The
+            # carried rack is suppressed by _set_carrying_mode's logic.
+            self._docking_target_id = None
             self._set_carrying_mode(True)
             time.sleep(self.p_settle_time)
 
-            # ── Step 2b: Extract — reverse ALL THE WAY to the lane foot ─
-            # In one pure straight-line move with no rotation, so the
-            # carried rack doesn't swing into neighbouring racks.
-            # Distance is computed dynamically: from the robot's actual
-            # pose backwards to the perpendicular foot on the source
-            # lane.  This replaces the previous "fixed reverse + lane
-            # waypoint" sequence that caused rack-rotation collisions.
-            src_yaw = src.get("yaw", 0.0) if src else 0.0
-            src_foot = None
+            # ── Step 2b: Extract straight back into the aisle ────────
+            # Pure straight reverse with lateral + yaw hold, closed-loop
+            # on odom, so the carried rack pulls out without swinging.
             if src:
-                src_foot = self._find_lane_approach_foot(
-                    src["x"], src["y"], src_yaw)
-
-            self._update_robot_pose()
-            rx, ry = self._robot_pose["x"], self._robot_pose["y"]
-            yaw = self._robot_pose["yaw"]
-
-            if src_foot is not None:
-                foot_x, foot_y = src_foot[0], src_foot[1]
-                # Forward distance to the foot, in robot frame
-                fwd_to_foot = ((foot_x - rx) * math.cos(yaw)
-                               + (foot_y - ry) * math.sin(yaw))
-                # Foot is on the approach side ⇒ it's BEHIND the robot
-                # right now (negative forward distance).  Reverse exactly
-                # that magnitude.
-                rev_dist = -fwd_to_foot
-                if rev_dist > 0.05:
-                    self._log(
-                        f"  Reversing {rev_dist:.2f} m straight back to "
-                        f"source aisle foot ({foot_x:.2f}, {foot_y:.2f}).")
-                    self._crawl(-spd, 0.0, rev_dist,
-                                label="Reversing rack to aisle")
-                else:
-                    self._log(
-                        f"  Source foot is not behind robot "
-                        f"(fwd={fwd_to_foot:.2f} m) — using fixed "
-                        f"{carry_d:.2f} m fallback.")
-                    self._crawl(-spd, 0.0, carry_d,
-                                label="Reversing rack (fallback)")
-            elif carry_d > 0:
-                # No lanes defined: fall back to the fixed reverse distance
-                self._crawl(-spd, 0.0, carry_d,
-                            label="Reversing rack to aisle")
-            time.sleep(0.3)
-            self._clear_costmaps()
-            time.sleep(0.5)
+                self._drive_straight_closed_loop(
+                    -self.p_extract_clearance,
+                    label="Extracting rack to aisle")
+                time.sleep(0.3)
+                self._clear_costmaps()
+                time.sleep(0.5)
 
             if self._cancel_requested or self._paused:
                 return False
 
             # ── Step 3: Navigate to DROP staging point (in the aisle) ─
-            # If lanes are defined, follow them through the warehouse
-            # rather than letting Nav2 free-plan through rack rows.
-            # The robot snaps to the nearest lane node, traverses the
-            # lane graph to the node nearest the drop staging, then
-            # makes a final hop to the staging point itself.
             self._current_task_step = "navigating_to_dest"
             self._state = MissionState.NAVIGATING
             if dst:
-                dst_yaw = dst.get("yaw", 0.0)
                 stg_x, stg_y = self._staging_point(
                     dst["x"], dst["y"], dst_yaw, carry_d)
 
@@ -857,31 +879,20 @@ class MissionManagerNode(Node):
 
                 self._log(f"Navigating to drop staging for "
                           f"{task.get('to_name', 'destination')}...")
-                ok = self._navigate_to(stg_x, stg_y, dst_yaw)
-                if not ok:
+                if not self._navigate_to(stg_x, stg_y, dst_yaw):
                     return False
 
             if self._cancel_requested or self._paused:
                 return False
 
-            # ── Step 3b: Insert — closed-loop crawl into drop slot ───
-            # Compute the actual forward distance from current pose to
-            # the drop centre (Nav2 may have left us short of staging).
+            # ── Step 3b: Insert to the EXACT drop coordinate ─────────
+            # No legs to servo on at an empty slot, so close the loop on
+            # map localization: holonomic P-servo straight onto the drop
+            # pose.  This is what fixes "leaves it in the aisle".
             if dst:
-                self._update_robot_pose()
-                rx = self._robot_pose["x"]
-                ry = self._robot_pose["y"]
-                yaw = self._robot_pose["yaw"]
-                dx = dst["x"] - rx
-                dy = dst["y"] - ry
-                forward_dist = dx * math.cos(yaw) + dy * math.sin(yaw)
-                max_crawl = carry_d + 1.0
-                crawl_d = max(0.0, min(forward_dist, max_crawl))
-                self._log(f"  Forward to drop centre: {forward_dist:.2f} m "
-                          f"→ crawling {crawl_d:.2f} m.")
-                if crawl_d > 0.03:
-                    self._crawl(spd, 0.0, crawl_d,
-                                label="Crawling into drop position")
+                self._current_task_step = "inserting"
+                self._drive_to_map_point(
+                    dst["x"], dst["y"], dst_yaw, label="drop insert")
 
             if self._cancel_requested or self._paused:
                 return False
@@ -894,49 +905,27 @@ class MissionManagerNode(Node):
             time.sleep(self.p_drop_wait)
 
             # Mark drop location as OCCUPIED — there's a rack there now.
-            # The next /rack_obstacles publish makes Nav2 see it as obstacle.
             if dst and dst.get("id"):
                 self._set_location_state(dst["id"], "occupied")
 
-            # ── Step 4b: Retreat — reverse straight to the drop lane foot
-            # Same pattern as the pickup extract: one pure-linear move all
-            # the way back to the aisle foot, no intermediate waypoint =
-            # no rotation while still in the rack slot.
+            # ── Step 4b: Retreat straight back into the aisle ────────
             if dst:
-                dst_yaw = dst.get("yaw", 0.0)
-                dst_foot = self._find_lane_approach_foot(
-                    dst["x"], dst["y"], dst_yaw)
-                self._update_robot_pose()
-                rx = self._robot_pose["x"]
-                ry = self._robot_pose["y"]
-                yaw = self._robot_pose["yaw"]
-                if dst_foot is not None:
-                    foot_x, foot_y = dst_foot[0], dst_foot[1]
-                    fwd_to_foot = ((foot_x - rx) * math.cos(yaw)
-                                   + (foot_y - ry) * math.sin(yaw))
-                    rev_dist = -fwd_to_foot
-                    if rev_dist > 0.05:
-                        self._log(f"  Reversing {rev_dist:.2f} m straight "
-                                  f"back to drop aisle foot "
-                                  f"({foot_x:.2f}, {foot_y:.2f}).")
-                        self._crawl(-spd, 0.0, rev_dist,
-                                    label="Retreating to aisle")
-                    elif carry_d > 0:
-                        self._crawl(-spd, 0.0, carry_d,
-                                    label="Retreating (fallback)")
-                elif carry_d > 0:
-                    self._crawl(-spd, 0.0, carry_d,
-                                label="Retreating to aisle")
+                self._drive_straight_closed_loop(
+                    -self.p_retreat_clearance,
+                    label="Retreating to aisle")
 
             self._log(f"Transport complete: "
                       f"{task.get('from_name')} → {task.get('to_name')}")
             return True
         finally:
-            # Always restore normal footprint + inflation, even on early returns
+            # Always restore normal footprint + inflation, even on early
+            # returns, and stop suppressing the target rack.
+            self._docking_target_id = None
             if self._carrying:
                 self._set_carrying_mode(False)
             else:
                 self._set_inflation(self.p_inflation_normal)
+            self._publish_rack_obstacles()
 
     def _execute_navigate(self, task):
         """Simple point-to-point navigation."""
@@ -1020,6 +1009,11 @@ class MissionManagerNode(Node):
     def _scan_cb(self, name, msg):
         """Store latest laser scan for rack-leg detection."""
         self._latest_scans[name] = msg
+
+    def _odom_cb(self, msg: Odometry):
+        """Cache measured body velocity for docking diagnostics."""
+        t = msg.twist.twist
+        self._odom_vel = (t.linear.x, t.linear.y, t.angular.z)
 
     # ─────────────────────────────────────────────────────────────────
     # Lane graph + waypoint following
@@ -1571,11 +1565,407 @@ class MissionManagerNode(Node):
         self._log(f"  Centering timed out")
         return False
 
+    # ─────────────────────────────────────────────────────────────────
+    # Closed-loop docking controller
+    # ─────────────────────────────────────────────────────────────────
+    # Three primitives replace the old open-loop crawl + 4-leg centering:
+    #   _dock_servo               — servo on detected rack legs (pickup).
+    #   _drive_to_map_point       — holonomic P-servo to a map pose (drop).
+    #   _drive_straight_closed_loop — odom straight move (extract/retreat).
+    # All three are closed-loop (TF feedback), so they survive wheel slip
+    # and odom drift on the real robot — no dead-reckoning.
+
+    @staticmethod
+    def _wrap_angle(a):
+        """Wrap an angle to (-pi, pi]."""
+        return math.atan2(math.sin(a), math.cos(a))
+
+    @staticmethod
+    def _clamp(v, lo, hi):
+        return lo if v < lo else (hi if v > hi else v)
+
+    def _get_tf_pose(self, target_frame, source_frame="base_footprint"):
+        """Return (x, y, yaw) of *source_frame* in *target_frame*, or None."""
+        try:
+            t = self._tf_buffer.lookup_transform(
+                target_frame, source_frame, rclpy.time.Time())
+            p = t.transform.translation
+            q = t.transform.rotation
+            return (p.x, p.y, _quaternion_to_yaw(q.x, q.y, q.z, q.w))
+        except Exception:
+            return None
+
+    def _breakaway(self, vx, vy, stall_since):
+        """Anti-stiction: if we're commanding motion but the measured body
+        speed is ~0, the robot is caught.  After p_stall_time, punch the
+        command up to p_breakaway_v along the commanded direction to break
+        free.  Returns (vx, vy, stall_since); stall_since is None when not
+        stalled, else the timestamp the stall began.
+        """
+        cmd_mag = math.hypot(vx, vy)
+        act_mag = math.hypot(self._odom_vel[0], self._odom_vel[1])
+        if cmd_mag > self.p_stall_speed_eps and act_mag < self.p_stall_speed_eps:
+            now = time.time()
+            if stall_since is None:
+                return vx, vy, now
+            if now - stall_since > self.p_stall_time:
+                scale = self.p_breakaway_v / cmd_mag
+                return vx * scale, vy * scale, stall_since
+            return vx, vy, stall_since
+        return vx, vy, None
+
+    def _collect_leg_clusters(self, hint_x, hint_y):
+        """Return lidar clusters (cx, cy, count) in base_footprint frame
+        that fall within *search_window* of the predicted rack centre
+        (hint).  Focusing on the hint rejects clutter from adjacent racks.
+        """
+        win = self.p_dock_search_window
+        win2 = win * win
+        all_points = []
+
+        for name, scan in list(self._latest_scans.items()):
+            if scan is None:
+                continue
+            tf = self._get_tf_pose("base_footprint", scan.header.frame_id)
+            if tf is None:
+                continue
+            tx, ty, tf_yaw = tf
+            cos_t, sin_t = math.cos(tf_yaw), math.sin(tf_yaw)
+
+            angle = scan.angle_min
+            for r in scan.ranges:
+                if 0.05 < r < (win + 1.0):
+                    sx = r * math.cos(angle)
+                    sy = r * math.sin(angle)
+                    bx = cos_t * sx - sin_t * sy + tx
+                    by = sin_t * sx + cos_t * sy + ty
+                    if (bx - hint_x) ** 2 + (by - hint_y) ** 2 < win2:
+                        all_points.append((bx, by))
+                angle += scan.angle_increment
+
+        if len(all_points) < 2:
+            return []
+        clusters = self._cluster_scan_points(
+            all_points, max_dist=self.p_leg_cluster_d)
+        # Drop single-point clusters — too likely to be noise.
+        return [c for c in clusters if c[2] >= 2]
+
+    def _estimate_rack_in_base(self, map_x, map_y, map_yaw):
+        """Estimate the rack pose in the robot (base_footprint) frame.
+
+        Prior-guided: predict the 4 leg positions from the stored map pose
+        + current localization, match each to the nearest observed lidar
+        cluster, then solve the 2D rigid transform (Procrustes) that best
+        aligns prediction→observation.  That transform IS the correction to
+        the prior, giving a refined rack centre + yaw in the base frame.
+
+        Works with 2–4 visible legs and tolerates localization error up to
+        the match gate.  Returns (cx, cy, cyaw, n_matched) or None.
+        """
+        robot_map = self._get_tf_pose("map")
+        if robot_map is None:
+            return None
+        rx, ry, ryaw = robot_map
+
+        # Prior rack centre + axis yaw, expressed in the base frame.
+        dx, dy = map_x - rx, map_y - ry
+        c, s = math.cos(ryaw), math.sin(ryaw)
+        pcx = dx * c + dy * s
+        pcy = -dx * s + dy * c
+        pyaw = self._wrap_angle(map_yaw - ryaw)
+
+        # Predicted leg positions (rack square, side = rack_side).
+        half = self.p_rack_side / 2.0
+        legs_local = [(half, half), (half, -half), (-half, half), (-half, -half)]
+        cc, ss = math.cos(pyaw), math.sin(pyaw)
+        predicted = [
+            (pcx + cc * lx - ss * ly, pcy + ss * lx + cc * ly)
+            for lx, ly in legs_local
+        ]
+
+        clusters = self._collect_leg_clusters(pcx, pcy)
+        if len(clusters) < 2:
+            return None
+
+        # Greedy nearest-cluster matching within the gate.
+        gate2 = self.p_dock_match_gate ** 2
+        matched_p, matched_o = [], []
+        used = set()
+        for px, py in predicted:
+            best_i, best_d2 = None, gate2
+            for i, (cx, cy, _) in enumerate(clusters):
+                if i in used:
+                    continue
+                d2 = (cx - px) ** 2 + (cy - py) ** 2
+                if d2 < best_d2:
+                    best_i, best_d2 = i, d2
+            if best_i is not None:
+                used.add(best_i)
+                matched_p.append((px, py))
+                matched_o.append((clusters[best_i][0], clusters[best_i][1]))
+
+        n = len(matched_p)
+        if n < 2:
+            return None
+
+        # 2D Procrustes: find dθ, dt with O ≈ R(dθ)·P + dt.
+        mpx = sum(p[0] for p in matched_p) / n
+        mpy = sum(p[1] for p in matched_p) / n
+        mox = sum(o[0] for o in matched_o) / n
+        moy = sum(o[1] for o in matched_o) / n
+        s_num = s_den = 0.0
+        for (px, py), (ox, oy) in zip(matched_p, matched_o):
+            pcx_, pcy_ = px - mpx, py - mpy
+            ocx_, ocy_ = ox - mox, oy - moy
+            s_num += pcx_ * ocy_ - pcy_ * ocx_
+            s_den += pcx_ * ocx_ + pcy_ * ocy_
+        dth = math.atan2(s_num, s_den)
+        cdt, sdt = math.cos(dth), math.sin(dth)
+        # Translation so the centroids line up after rotation.
+        tx = mox - (cdt * mpx - sdt * mpy)
+        ty = moy - (sdt * mpx + cdt * mpy)
+
+        # Apply the correction to the prior rack centre + yaw.
+        cx = cdt * pcx - sdt * pcy + tx
+        cy = sdt * pcx + cdt * pcy + ty
+        cyaw = self._wrap_angle(pyaw + dth)
+        return (cx, cy, cyaw, n)
+
+    def _dock_servo(self, map_x, map_y, map_yaw, label="rack"):
+        """Closed-loop perpendicular docking onto the rack legs.
+
+        Holonomic P-control nulls lateral (e_y) and yaw (e_th) error while
+        gating forward motion (e_x) on alignment, so the robot slides in
+        straight down the rack axis without clipping legs.  Servos on the
+        detected legs, so it converges on the *true* rack pose regardless
+        of odom/localization drift.  Falls back to a map-coordinate servo
+        if the legs can't be seen.
+
+        Returns True once converged within tolerance, False on timeout.
+        """
+        dt = 1.0 / self.p_dock_rate
+        converged = 0
+        lost = 0
+        lost_limit = int(self.p_dock_lost_timeout * self.p_dock_rate)
+        t0 = time.time()
+        last_log = 0.0
+        stall_since = None
+        self._log(f"  Docking servo: locking onto {label} legs...")
+
+        while True:
+            if self._cancel_requested or self._paused:
+                self._cmd_vel_pub.publish(Twist())
+                return False
+            if time.time() - t0 > self.p_dock_timeout:
+                self._cmd_vel_pub.publish(Twist())
+                self._log("  Docking timed out.")
+                return False
+
+            est = self._estimate_rack_in_base(map_x, map_y, map_yaw)
+            if est is None:
+                lost += 1
+                self._cmd_vel_pub.publish(Twist())  # hold position
+                if lost > lost_limit:
+                    self._log("  Legs not visible — falling back to "
+                              "map-coordinate docking.")
+                    return self._drive_to_map_point(
+                        map_x, map_y, map_yaw, label="dock (coord fallback)")
+                time.sleep(dt)
+                continue
+            lost = 0
+
+            cx, cy, cyaw, n = est
+            e_x, e_y, e_th = cx, cy, cyaw  # drive robot centre → rack centre
+
+            if (abs(e_x) < self.p_dock_pos_tol
+                    and abs(e_y) < self.p_dock_pos_tol
+                    and abs(e_th) < self.p_dock_yaw_tol):
+                converged += 1
+                if converged >= self.p_dock_converge_count:
+                    self._cmd_vel_pub.publish(Twist())
+                    # Snapshot the measured leg positions (base frame) so the
+                    # payload filter masks exactly where the legs really are.
+                    half = self.p_rack_side / 2.0
+                    cc, ss = math.cos(cyaw), math.sin(cyaw)
+                    self._payload_legs = [
+                        (cx + cc * lx - ss * ly, cy + ss * lx + cc * ly)
+                        for lx, ly in ((half, half), (half, -half),
+                                       (-half, half), (-half, -half))
+                    ]
+                    self._log(f"  Docked. residual=({e_x:.3f}, {e_y:.3f}) m, "
+                              f"yaw={e_th:.3f} rad, legs={n}")
+                    return True
+            else:
+                converged = 0
+
+            # Alignment gate: forward motion fades as lateral/yaw error
+            # exceeds tolerance, but never drops below dock_vx_floor — so
+            # the robot always keeps creeping in (toward better leg geometry)
+            # while it squares up, instead of stalling far back.  Only error
+            # *beyond* tolerance penalises the gate.
+            ex_y = max(0.0, abs(e_y) - self.p_dock_pos_tol)
+            ex_th = max(0.0, abs(e_th) - self.p_dock_yaw_tol)
+            gate = self._clamp(
+                1.0 - ex_y / self.p_dock_gate_y - ex_th / self.p_dock_gate_yaw,
+                self.p_dock_vx_floor, 1.0)
+
+            twist = Twist()
+            twist.linear.x = self._clamp(
+                self.p_dock_kx * e_x, -self.p_dock_vx_max,
+                self.p_dock_vx_max) * gate
+            twist.linear.y = self._clamp(
+                self.p_dock_ky * e_y, -self.p_dock_vy_max, self.p_dock_vy_max)
+            twist.angular.z = self._clamp(
+                self.p_dock_kth * e_th, -self.p_dock_wz_max, self.p_dock_wz_max)
+            # Punch through a stiction catch (e.g. rack entrance) if stalled.
+            twist.linear.x, twist.linear.y, stall_since = self._breakaway(
+                twist.linear.x, twist.linear.y, stall_since)
+            self._cmd_vel_pub.publish(twist)
+
+            # Throttled live telemetry (~1 Hz) for tuning.
+            now = time.time()
+            if now - last_log > 1.0:
+                last_log = now
+                ov = self._odom_vel
+                self._log(f"  dock e=({e_x:+.3f},{e_y:+.3f}) m "
+                          f"yaw={e_th:+.3f} rad gate={gate:.2f} legs={n} "
+                          f"cmd_v=({twist.linear.x:+.2f},{twist.linear.y:+.2f}) "
+                          f"act_v=({ov[0]:+.2f},{ov[1]:+.2f})")
+            time.sleep(dt)
+
+    def _drive_to_map_point(self, tx, ty, tyaw, pos_tol=None, label=""):
+        """Holonomic P-servo that drives the robot centre to a map pose.
+
+        Uses map TF each cycle, so it places the robot on an absolute
+        coordinate (used for the drop, where there are no legs to servo
+        on).  Heading is held at *tyaw* throughout, so the move is a
+        straight slide with no rack-swinging rotation.
+        """
+        pos_tol = self.p_drive_pos_tol if pos_tol is None else pos_tol
+        dt = 1.0 / self.p_drive_rate
+        t0 = time.time()
+        if label:
+            self._log(f"  Driving to ({tx:.2f}, {ty:.2f}) [{label}]...")
+
+        while True:
+            if self._cancel_requested or self._paused:
+                self._cmd_vel_pub.publish(Twist())
+                return False
+            if time.time() - t0 > self.p_drive_timeout:
+                self._cmd_vel_pub.publish(Twist())
+                self._log("  Drive-to-point timed out.")
+                return False
+
+            pose = self._get_tf_pose("map")
+            if pose is None:
+                time.sleep(dt)
+                continue
+            rx, ry, ryaw = pose
+            dx, dy = tx - rx, ty - ry
+            dist = math.hypot(dx, dy)
+            e_yaw = self._wrap_angle(tyaw - ryaw)
+
+            if dist < pos_tol and abs(e_yaw) < self.p_drive_yaw_tol:
+                self._cmd_vel_pub.publish(Twist())
+                return True
+
+            # Map-frame error → robot-frame velocity (holonomic).
+            c, s = math.cos(ryaw), math.sin(ryaw)
+            ex = dx * c + dy * s
+            ey = -dx * s + dy * c
+            vx = self._clamp(self.p_drive_kp * ex,
+                             -self.p_drive_vmax, self.p_drive_vmax)
+            vy = self._clamp(self.p_drive_kp * ey,
+                             -self.p_drive_vmax, self.p_drive_vmax)
+            # Enforce a creep floor so it doesn't stall just outside tol.
+            if dist > pos_tol:
+                mag = math.hypot(vx, vy)
+                if 0 < mag < self.p_drive_vmin:
+                    k = self.p_drive_vmin / mag
+                    vx *= k
+                    vy *= k
+
+            twist = Twist()
+            twist.linear.x = vx
+            twist.linear.y = vy
+            twist.angular.z = self._clamp(
+                self.p_drive_yaw_hold_k * e_yaw,
+                -self.p_dock_wz_max, self.p_dock_wz_max)
+            self._cmd_vel_pub.publish(twist)
+            time.sleep(dt)
+
+    def _drive_straight_closed_loop(self, distance, label=""):
+        """Drive a signed *distance* straight along the robot's heading,
+        closed-loop on odom, while holding lateral offset and yaw at zero.
+
+        Positive = forward, negative = reverse.  Holding lateral + yaw is
+        what keeps a carried rack from swinging into neighbours during
+        extraction.  Closed-loop on odom (continuous, no localization
+        jumps), so wheel slip can't accumulate distance error.
+        """
+        start = self._get_tf_pose("odom")
+        if start is None:
+            self._log("  Straight drive: no odom TF — aborting move.")
+            return False
+        x0, y0, yaw0 = start
+        c0, s0 = math.cos(yaw0), math.sin(yaw0)
+        dt = 1.0 / self.p_drive_rate
+        t0 = time.time()
+        stall_since = None
+        if label:
+            self._log(f"  {label} ({distance:+.2f} m, closed-loop)...")
+
+        while True:
+            if self._cancel_requested or self._paused:
+                self._cmd_vel_pub.publish(Twist())
+                return False
+            if time.time() - t0 > self.p_drive_timeout:
+                self._cmd_vel_pub.publish(Twist())
+                self._log("  Straight drive timed out.")
+                return False
+
+            pose = self._get_tf_pose("odom")
+            if pose is None:
+                time.sleep(dt)
+                continue
+            rx, ry, ryaw = pose
+            ddx, ddy = rx - x0, ry - y0
+            travelled = ddx * c0 + ddy * s0      # along the heading axis
+            lateral = -ddx * s0 + ddy * c0       # drift off the line
+            remaining = distance - travelled
+
+            if abs(remaining) < self.p_drive_pos_tol:
+                self._cmd_vel_pub.publish(Twist())
+                return True
+
+            vx = self._clamp(self.p_drive_kp * remaining,
+                             -self.p_drive_vmax, self.p_drive_vmax)
+            if 0 < abs(vx) < self.p_drive_vmin:
+                vx = math.copysign(self.p_drive_vmin, vx)
+
+            twist = Twist()
+            twist.linear.x = vx
+            twist.linear.y = self._clamp(
+                -self.p_drive_lat_hold_k * lateral,
+                -self.p_drive_vmax, self.p_drive_vmax)
+            twist.angular.z = self._clamp(
+                -self.p_drive_yaw_hold_k * self._wrap_angle(ryaw - yaw0),
+                -self.p_dock_wz_max, self.p_dock_wz_max)
+            # Break free if the carried rack catches (e.g. leg scrape).
+            twist.linear.x, twist.linear.y, stall_since = self._breakaway(
+                twist.linear.x, twist.linear.y, stall_since)
+            self._cmd_vel_pub.publish(twist)
+            time.sleep(dt)
+
     def _crawl(self, vx, vy, distance, label=""):
         """Drive at (vx, vy) without Nav2 for *distance* metres.
 
         Pure straight-line movement — no angular velocity — so the carried
         rack doesn't swing into adjacent racks.
+
+        DEPRECATED: open-loop dead-reckoning.  Kept only as a reference /
+        emergency fallback; the transport sequence now uses the closed-loop
+        primitives above.
         """
         speed = math.sqrt(vx * vx + vy * vy)
         if speed <= 0 or distance <= 0:
@@ -1620,11 +2010,32 @@ class MissionManagerNode(Node):
         time.sleep(0.3)
         self._clear_costmaps()
 
+    def _publish_payload_mask(self):
+        """Broadcast carried-leg positions (base frame) to the payload filter.
+
+        Non-empty only while carrying; empty array tells the filter to pass
+        scans through unmodified.
+        """
+        msg = Float32MultiArray()
+        if self._carrying and self._payload_legs:
+            flat = []
+            for x, y in self._payload_legs:
+                flat.extend((float(x), float(y)))
+            msg.data = flat
+        else:
+            msg.data = []
+        self._payload_mask_pub.publish(msg)
+
     def _set_carrying_mode(self, carrying: bool):
         """Switch costmap footprint and obstacle layers for rack carrying."""
         self._carrying = carrying
         mode_str = "CARRYING" if carrying else "EMPTY"
         self._log(f"Footprint → {mode_str}")
+
+        if not carrying:
+            self._payload_legs = []
+        # Tell the payload filter to start/stop masking the carried legs.
+        self._publish_payload_mask()
 
         if carrying:
             footprint = self.p_footprint_carrying
@@ -1756,12 +2167,17 @@ class MissionManagerNode(Node):
             carried_id = self._current_task.get("rack_id") \
                 or (self._current_task.get("from") or {}).get("id")
 
+        # Rack(s) to suppress as obstacles: the one being carried AND the
+        # one we're actively docking under (so the planner/controller will
+        # actually drive the footprint up to its legs instead of refusing).
+        suppressed = {i for i in (carried_id, self._docking_target_id) if i}
+
         points = []
         for key in ("racks", "drop_zones"):
             for loc in self._locations.get(key, []):
                 if loc.get("state", "free") != "occupied":
                     continue
-                if carried_id and loc.get("id") == carried_id:
+                if loc.get("id") in suppressed:
                     continue
                 cx, cy = loc.get("x", 0.0), loc.get("y", 0.0)
                 yaw = loc.get("yaw", 0.0)
@@ -1788,6 +2204,9 @@ class MissionManagerNode(Node):
         msg.is_dense = True
         msg.data = b"".join(struct.pack("<fff", *p) for p in points)
         self._rack_obs_pub.publish(msg)
+
+        # Keep the payload mask fresh (cheap; survives a filter restart).
+        self._publish_payload_mask()
 
     # ─────────────────────────────────────────────────────────────────
     # State broadcasting

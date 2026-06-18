@@ -13,7 +13,9 @@ install(
 )
 
 install(
-  PROGRAMS scripts/scan_merger.py
+  PROGRAMS
+    scripts/scan_merger.py
+    scripts/payload_filter.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

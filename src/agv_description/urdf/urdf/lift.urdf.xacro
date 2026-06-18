@@ -2,7 +2,13 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:property name="lift_mass" value="5.0" />
-  <xacro:property name="lift_range" value="0.25" />
+  <!-- Realistic latent-lift travel: the lift contacts the rack's bottom
+       shelf after ~0.07 m, so 0.20 m of travel raises the rack ~0.13 m —
+       enough to clear the floor (no leg scrape on extraction) but the legs
+       stay in the scanner plane, exactly as on the real robot.  The carried
+       legs are handled by the payload_filter, NOT by lifting them out of the
+       beam (which is impossible on hardware). -->
+  <xacro:property name="lift_range" value="0.20" />
 
   <xacro:macro name="lift_mechanism" params="prefix parent_link">
 
@@ -34,7 +40,7 @@
       <child link="${prefix}lift_link"/>
       <origin xyz="0 0 0.15" rpy="0 0 0"/>
       <axis xyz="0 0 1"/>
-      <limit lower="0" upper="${lift_range}" effort="200" velocity="0.12"/>
+      <limit lower="0" upper="${lift_range}" effort="200" velocity="0.20"/>
       <safety_controller
         soft_lower_limit="0.0"
         soft_upper_limit="${lift_range}"
