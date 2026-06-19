@@ -51,10 +51,11 @@ mission_manager:
     # The rack's yaw defines which side the aisle is on.
     crawl_speed: 0.12
 
-    # Pickup: empty footprint (0.70 m), short hop. Just past the near
-    # rack legs so the staging point lands in the aisle, not inside
-    # a neighbouring rack in dense layouts.
-    pickup_approach_distance: 0.55
+    # Pickup: Nav2 must stop FULLY OUTSIDE the rack footprint (≥ rack_half
+    # 0.475 + robot_half 0.35 + margin) so it isn't repelled by the legs;
+    # the closed-loop dock_servo (not Nav2) does the precise drive under the
+    # rack from here.  0.55 m put the footprint between the legs → Nav2 "fears".
+    pickup_approach_distance: 1.35
 
     # Carrying: bigger footprint (1.05 m) needs more clearance so it
     # ends up fully outside neighbouring rack legs' inflation zones
@@ -69,14 +70,16 @@ mission_manager:
     #   - carrying: low — needed so the larger carrying footprint can
     #               still find paths through the warehouse
     inflation_radius_normal: 0.55
-    inflation_radius_pickup: 0.40
+    # Low on approach: dock_servo does the precise under-rack drive, so Nav2
+    # must NOT be repelled by the rack legs its own lidar sees.
+    inflation_radius_pickup: 0.25
     inflation_radius_carrying: 0.25
 
     # ── Transport task timing ─────────────────────────────────────────
-    lift_height: 1.0          # lift target height
-    lift_wait_time: 3.0       # seconds to wait after sending lift command
+    lift_height: 0.20         # lift target — matches URDF lift_range (0.20)
+    lift_wait_time: 6.0       # seconds to wait after sending lift command
     costmap_settle_time: 1.0  # seconds to wait after carrying mode switch
-    drop_wait_time: 2.0       # seconds to wait after sending drop command
+    drop_wait_time: 5.0       # let the rack fully settle before reversing out
 
     # ── Speed ─────────────────────────────────────────────────────────
     default_speed: 0.4        # default max speed multiplier (m/s)
@@ -86,3 +89,47 @@ mission_manager:
     # ── Navigation ────────────────────────────────────────────────────
     nav_goal_timeout: 10.0    # seconds to wait for Nav2 goal acceptance
     nav_poll_rate: 0.05       # seconds between polling for nav result
+
+    # ── Closed-loop docking (leg-servo) ───────────────────────────────
+    # dock_servo drives the robot from the pickup staging point precisely
+    # under the rack, servoing on the detected legs (x, y AND yaw).
+    robot_half_length: 0.35
+    robot_half_width: 0.32
+    dock_gain_x: 0.9
+    dock_gain_y: 1.1
+    dock_gain_yaw: 1.4
+    dock_vx_max: 0.28         # entry momentum to carry through the legs
+    dock_vy_max: 0.18
+    dock_wz_max: 0.6
+    dock_pos_tolerance: 0.03
+    dock_yaw_tolerance: 0.05
+    dock_converge_count: 4
+    dock_gate_y: 0.20         # forward motion fades past this lateral error
+    dock_gate_yaw: 0.30
+    dock_vx_floor: 0.30       # min forward fraction (never stall while aligning)
+    dock_rate_hz: 15.0
+    dock_timeout: 90.0
+    dock_lost_timeout: 2.5    # s of lost legs before map-coordinate fallback
+    dock_leg_match_gate: 0.30 # cluster→predicted-leg match radius
+    dock_search_window: 0.95  # ignore clusters beyond this from rack centre
+
+    # ── Stiction breakaway ────────────────────────────────────────────
+    # If commanding motion but dragging below stall_ratio of it for
+    # stall_time, punch the command to breakaway_velocity to break free.
+    stall_speed_eps: 0.03
+    stall_ratio: 0.4
+    stall_time: 0.35
+    breakaway_velocity: 0.55
+
+    # ── Closed-loop straight / point drives (extract / insert / retreat) ─
+    drive_gain: 1.4
+    drive_vmax: 0.25
+    drive_vmin: 0.04
+    drive_pos_tolerance: 0.02
+    drive_yaw_tolerance: 0.03
+    drive_yaw_hold_gain: 1.2
+    drive_lateral_hold_gain: 1.2
+    drive_rate_hz: 20.0
+    drive_timeout: 45.0
+    extract_clearance: 1.15   # straight reverse to pull rack into the aisle
+    retreat_clearance: 1.15

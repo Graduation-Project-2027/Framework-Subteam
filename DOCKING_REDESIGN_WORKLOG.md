@@ -11,7 +11,7 @@ Primary file: `src/agv_mission_control/agv_mission_control/mission_manager_node.
 
 ---
 
-## 1. Starting symptoms (user report)
+## 1. Starting symptoms
 
 - Robot fails to center itself under the rack; unreliable.
 - Creeps in/out of the rack perpendicular to the aisle but fails to fully
@@ -120,6 +120,20 @@ repelled by the rack legs its own lidar sees (source rack is excluded from
 **Resolution:** Lowered the pickup-approach inflation (`inflation_radius_pickup`
 0.40 → **0.25**). `dock_servo` (not Nav2) does the precise under-rack drive, so
 Nav2 must not fear the legs.
+
+### Fix I — Params were silently overridden by YAML (the real "still fears" cause)
+**Problem:** The robot kept stalling at *"Navigating to pickup staging"* with the
+log showing `Inflation radius → 0.40m`. None of the tuned values (staging 1.35,
+inflation 0.25, lift/wait) were taking effect — staging was still **0.55 m**, i.e.
+between the near legs, so Nav2 genuinely couldn't place the footprint there.
+**Cause:** `mission_control.launch.py` loads `config/mission_manager.yaml`, and
+**YAML params override the code defaults** declared in `_declare_params`. Every
+"fix" made only in code was dead on arrival.
+**Resolution:** `config/mission_manager.yaml` is the source of truth — updated
+`pickup_approach_distance` 0.55→1.35, `inflation_radius_pickup` 0.40→0.25,
+`lift_height` 1.0→0.20, `lift_wait_time` 3→6, `drop_wait_time` 2→5, and added all
+the new dock/breakaway/drive params there. **Always edit the YAML, not just the
+code defaults.**
 
 ## 5. Data flow (final)
 

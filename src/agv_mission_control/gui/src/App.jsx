@@ -89,7 +89,7 @@ function SpeedControl({ sendCommand }) {
 
 /* ── Main App ──────────────────────────────────────────────────────── */
 function AppInner() {
-  const { connected, missionState, feedbackLog, sendCommand } = useROS();
+  const { connected, missionState, feedbackLog, plan, sendCommand } = useROS();
   const [pickMode, setPickMode] = useState(null); // null | { active, callback }
   const [laneDraft, setLaneDraft] = useState(null); // null | { points: [{x,y}, ...] }
 
@@ -170,6 +170,7 @@ function AppInner() {
         laneDraft={laneDraft}
         onAddLanePoint={addLanePoint}
         onFinishLaneDraft={finishLaneDraft}
+        plan={plan}
       />
 
       <div className="sidebar-right panel">

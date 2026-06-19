@@ -1,6 +1,8 @@
 /**
  * Header — Top control bar with state badge, mission controls, connection indicator.
  */
+import SystemLauncher from "./SystemLauncher";
+
 export default function Header({ missionState, connected, sendCommand }) {
   const state = missionState.state;
 
@@ -11,6 +13,7 @@ export default function Header({ missionState, connected, sendCommand }) {
       <div className="header__logo">
         <div className="header__logo-icon">🤖</div>
         <h1>AGV Mission Control</h1>
+        <SystemLauncher />
       </div>
 
       <div className="header__controls">

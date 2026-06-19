@@ -1,7 +1,11 @@
 /**
- * MapCanvas — Renders the PGM-derived map with robot pose,
- * rack markers, dock, and click-to-navigate.
- * Supports pick mode: click to set position, drag to set heading.
+ * MapCanvas — live warehouse map.
+ *
+ * Renders on a requestAnimationFrame loop (decoupled from React) so the
+ * robot pose can be smoothly interpolated between the 5 Hz state updates
+ * instead of stepping/lagging.  Draws the map image, a metric grid, lanes,
+ * racks/zones coloured by their actual free/occupied state, the dock, and
+ * the robot (true footprint + heading + motion trail).  High-DPI aware.
  */
 import { useRef, useEffect, useState, useCallback } from "react";
 
@@ -12,16 +16,28 @@ const MAP_META = {
   height: 808,
 };
 
-function worldToPixel(wx, wy) {
-  const px = (wx - MAP_META.origin[0]) / MAP_META.resolution;
-  const py = MAP_META.height - (wy - MAP_META.origin[1]) / MAP_META.resolution;
-  return [px, py];
-}
+const RACK_SIDE = 0.95;            // m, rack footprint
+const ROBOT_LEN = 0.70;            // m
+const ROBOT_WID = 0.64;            // m
+const PX_PER_M = 1 / MAP_META.resolution;
 
+function worldToPixel(wx, wy) {
+  return [
+    (wx - MAP_META.origin[0]) / MAP_META.resolution,
+    MAP_META.height - (wy - MAP_META.origin[1]) / MAP_META.resolution,
+  ];
+}
 function pixelToWorld(px, py) {
-  const wx = px * MAP_META.resolution + MAP_META.origin[0];
-  const wy = (MAP_META.height - py) * MAP_META.resolution + MAP_META.origin[1];
-  return [wx, wy];
+  return [
+    px * MAP_META.resolution + MAP_META.origin[0],
+    (MAP_META.height - py) * MAP_META.resolution + MAP_META.origin[1],
+  ];
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+function lerpAngle(a, b, t) {
+  let d = ((b - a + Math.PI) % (2 * Math.PI)) - Math.PI;
+  if (d < -Math.PI) d += 2 * Math.PI;
+  return a + d * t;
 }
 
 export default function MapCanvas({
@@ -32,469 +48,250 @@ export default function MapCanvas({
   laneDraft,
   onAddLanePoint,
   onFinishLaneDraft,
+  plan,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const imgRef = useRef(null);
-  const [loaded, setLoaded] = useState(false);
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 0.8 });
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  // Live values the rAF loop reads (refs avoid restarting the loop).
+  const stateRef = useRef(missionState);
+  const laneDraftRef = useRef(laneDraft);
+  const planRef = useRef(plan);
+  const transformRef = useRef({ x: 0, y: 0, scale: 0.85 });
+  const dispPoseRef = useRef(null);        // smoothed robot pose
+  const trailRef = useRef([]);             // [{x,y,t}] world-frame breadcrumb
+  const pickArrowRef = useRef(null);
+  const lastTsRef = useRef(0);
+
   const [mouseWorld, setMouseWorld] = useState(null);
-  const dragRef = useRef({ dragging: false, startX: 0, startY: 0 });
-  // Pick-drag state: click sets position, drag direction sets yaw
-  const pickDragRef = useRef(null); // { startPx, startPy, worldX, worldY }
-  const [pickArrow, setPickArrow] = useState(null); // { sx, sy, ex, ey, yaw } in canvas coords
+  const dragRef = useRef({ dragging: false, sx: 0, sy: 0 });
+  const pickDragRef = useRef(null);
+
+  useEffect(() => { stateRef.current = missionState; }, [missionState]);
+  useEffect(() => { laneDraftRef.current = laneDraft; }, [laneDraft]);
+  useEffect(() => { planRef.current = plan; }, [plan]);
 
   // Load map image
   useEffect(() => {
     const img = new Image();
     img.src = "/map.png";
-    img.onload = () => {
-      imgRef.current = img;
-      setLoaded(true);
-    };
+    img.onload = () => { imgRef.current = img; setImgLoaded(true); };
   }, []);
 
-  // Convert mouse event to map-pixel coords
-  const getMapPixelFromMouse = useCallback(
-    (e) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return null;
-      const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const px =
-        (cx - (transform.x + canvas.width / 2)) / transform.scale +
-        MAP_META.width / 2;
-      const py =
-        (cy - (transform.y + canvas.height / 2)) / transform.scale +
-        MAP_META.height / 2;
-      return { px, py };
-    },
-    [transform]
-  );
-
-  const getWorldFromMouse = useCallback(
-    (e) => {
-      const p = getMapPixelFromMouse(e);
-      if (!p) return null;
-      const [wx, wy] = pixelToWorld(p.px, p.py);
-      return { x: Math.round(wx * 100) / 100, y: Math.round(wy * 100) / 100 };
-    },
-    [getMapPixelFromMouse]
-  );
-
-  // Convert map pixel to canvas screen pixel
-  const mapPxToScreen = useCallback(
-    (mpx, mpy) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return [0, 0];
-      const sx = (mpx - MAP_META.width / 2) * transform.scale + transform.x + canvas.width / 2;
-      const sy = (mpy - MAP_META.height / 2) * transform.scale + transform.y + canvas.height / 2;
-      return [sx, sy];
-    },
-    [transform]
-  );
-
-  // Draw everything
-  useEffect(() => {
-    if (!loaded || !canvasRef.current) return;
-
+  // ── Coordinate helpers (CSS pixels) ───────────────────────────────
+  const mouseToMapPx = useCallback((e) => {
     const canvas = canvasRef.current;
-    const container = containerRef.current;
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.translate(transform.x + canvas.width / 2, transform.y + canvas.height / 2);
-    ctx.scale(transform.scale, transform.scale);
-    ctx.translate(-MAP_META.width / 2, -MAP_META.height / 2);
-
-    // Map image
-    ctx.drawImage(imgRef.current, 0, 0);
-
-    // ── Lanes (drawn first, under everything else) ─────────────────
-    const drawLanePoly = (points, opts) => {
-      if (!points || points.length === 0) return;
-      ctx.save();
-      // White halo behind the line so it stays visible against any map background
-      if (opts.halo) {
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = (opts.lineWidth || 2) + 4;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.globalAlpha = 0.7;
-        ctx.beginPath();
-        points.forEach((p, i) => {
-          const [px, py] = worldToPixel(p.x, p.y);
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        });
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-      ctx.strokeStyle = opts.stroke;
-      ctx.fillStyle = opts.fill;
-      ctx.lineWidth = opts.lineWidth || 2;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.setLineDash(opts.dash || []);
-      ctx.beginPath();
-      points.forEach((p, i) => {
-        const [px, py] = worldToPixel(p.x, p.y);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Vertex dots with white outline
-      points.forEach((p) => {
-        const [px, py] = worldToPixel(p.x, p.y);
-        ctx.beginPath();
-        ctx.arc(px, py, (opts.dotRadius || 4) + 1, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(px, py, opts.dotRadius || 4, 0, Math.PI * 2);
-        ctx.fillStyle = opts.fill;
-        ctx.fill();
-      });
-      ctx.restore();
-    };
-
-    (missionState.locations?.lanes || []).forEach((lane) => {
-      drawLanePoly(lane.points, {
-        stroke: "#06b6d4",
-        fill: "#06b6d4",
-        lineWidth: 5,
-        dotRadius: 5,
-        halo: true,
-      });
-    });
-
-    if (laneDraft && laneDraft.points.length > 0) {
-      drawLanePoly(laneDraft.points, {
-        stroke: "#f59e0b",
-        fill: "#f59e0b",
-        lineWidth: 5,
-        dotRadius: 6,
-        dash: [6, 4],
-        halo: true,
-      });
-    }
-
-    // Dock marker
-    const dock = missionState.locations?.dock;
-    if (dock && dock.x !== undefined) {
-      const [dx, dy] = worldToPixel(dock.x, dock.y);
-      ctx.save();
-      ctx.translate(dx, dy);
-      ctx.fillStyle = "#f59e0b";
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 0.3;
-      ctx.beginPath();
-      ctx.arc(0, 0, 16, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 10px Inter";
-      ctx.textAlign = "center";
-      ctx.fillText("🏠", 0, -18);
-      ctx.restore();
-    }
-
-    // Rack-square renderer — draws a 0.95m × 0.95m oriented square
-    // coloured by state (green = free, red = occupied).  This is what
-    // Nav2 sees as obstacles when "occupied" via the /rack_obstacles topic.
-    const RACK_HALF_PX = (0.95 / 2) / MAP_META.resolution; // ≈ 9.5px
-    const drawRackSquare = (loc, kind) => {
-      const [px, py] = worldToPixel(loc.x, loc.y);
-      const yaw = -(loc.yaw || 0); // canvas y is flipped
-      const occupied = (loc.state || (kind === "rack" ? "occupied" : "free")) === "occupied";
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(yaw);
-      // Filled square + border
-      ctx.fillStyle = occupied ? "rgba(239, 68, 68, 0.35)" : "rgba(34, 197, 94, 0.30)";
-      ctx.strokeStyle = occupied ? "#ef4444" : "#22c55e";
-      ctx.lineWidth = 2;
-      ctx.fillRect(-RACK_HALF_PX, -RACK_HALF_PX, RACK_HALF_PX * 2, RACK_HALF_PX * 2);
-      ctx.strokeRect(-RACK_HALF_PX, -RACK_HALF_PX, RACK_HALF_PX * 2, RACK_HALF_PX * 2);
-      // Heading tick (which way Nav2 will face when it arrives)
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(RACK_HALF_PX, 0);
-      ctx.stroke();
-      ctx.restore();
-      // Label (un-rotated)
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font = "bold 10px Inter";
-      ctx.textAlign = "center";
-      ctx.fillText(loc.name || loc.id, 0, -RACK_HALF_PX - 6);
-      ctx.restore();
-    };
-
-    (missionState.locations?.racks || []).forEach((r) => drawRackSquare(r, "rack"));
-    (missionState.locations?.drop_zones || []).forEach((z) => drawRackSquare(z, "zone"));
-
-    // Robot pose
-    const pose = missionState.robot_pose;
-    if (pose) {
-      const [rpx, rpy] = worldToPixel(pose.x, pose.y);
-      const yaw = -(pose.yaw || 0);
-      ctx.save();
-      ctx.translate(rpx, rpy);
-      ctx.rotate(yaw);
-      ctx.fillStyle = "#3b82f6";
-      ctx.globalAlpha = 0.9;
-      ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(-8, -7);
-      ctx.lineTo(-5, 0);
-      ctx.lineTo(-8, 7);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 0.2;
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 14, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    ctx.restore();
-
-    // Draw pick arrow overlay (in screen space, after the main transform is restored)
-    if (pickArrow) {
-      ctx.save();
-      ctx.strokeStyle = "#f59e0b";
-      ctx.fillStyle = "#f59e0b";
-      ctx.lineWidth = 2.5;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(pickArrow.sx, pickArrow.sy);
-      ctx.lineTo(pickArrow.ex, pickArrow.ey);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Arrow head
-      const angle = Math.atan2(pickArrow.ey - pickArrow.sy, pickArrow.ex - pickArrow.sx);
-      const hs = 10;
-      ctx.beginPath();
-      ctx.moveTo(pickArrow.ex, pickArrow.ey);
-      ctx.lineTo(
-        pickArrow.ex - hs * Math.cos(angle - 0.4),
-        pickArrow.ey - hs * Math.sin(angle - 0.4)
-      );
-      ctx.lineTo(
-        pickArrow.ex - hs * Math.cos(angle + 0.4),
-        pickArrow.ey - hs * Math.sin(angle + 0.4)
-      );
-      ctx.closePath();
-      ctx.fill();
-      // Dot at start
-      ctx.beginPath();
-      ctx.arc(pickArrow.sx, pickArrow.sy, 5, 0, Math.PI * 2);
-      ctx.fill();
-      // Yaw text
-      ctx.font = "bold 11px Inter";
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "left";
-      ctx.fillText(
-        `${(pickArrow.yaw * 180 / Math.PI).toFixed(0)}°`,
-        pickArrow.ex + 8,
-        pickArrow.ey - 4
-      );
-      ctx.restore();
-    }
-  }, [loaded, missionState, transform, pickArrow, laneDraft]);
-
-  // Resize handler
-  useEffect(() => {
-    const obs = new ResizeObserver(() => {
-      if (canvasRef.current && containerRef.current) {
-        canvasRef.current.width = containerRef.current.clientWidth;
-        canvasRef.current.height = containerRef.current.clientHeight;
-        setLoaded((v) => v);
-      }
-    });
-    if (containerRef.current) obs.observe(containerRef.current);
-    return () => obs.disconnect();
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const t = transformRef.current;
+    const px = (cx - (t.x + rect.width / 2)) / t.scale + MAP_META.width / 2;
+    const py = (cy - (t.y + rect.height / 2)) / t.scale + MAP_META.height / 2;
+    return { px, py, cx, cy };
   }, []);
 
-  // Mouse handlers
-  const onMouseDown = useCallback(
-    (e) => {
-      if (e.button !== 0) return;
+  const mouseToWorld = useCallback((e) => {
+    const p = mouseToMapPx(e);
+    if (!p) return null;
+    const [wx, wy] = pixelToWorld(p.px, p.py);
+    return { x: Math.round(wx * 100) / 100, y: Math.round(wy * 100) / 100 };
+  }, [mouseToMapPx]);
 
-      // Lane drawing: each click adds a vertex
-      if (laneDraft) {
-        const w = getWorldFromMouse(e);
-        if (w && onAddLanePoint) onAddLanePoint(w.x, w.y);
-        return;
+  // ── Render loop ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!imgLoaded) return;
+    let raf;
+
+    const draw = (ts) => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) { raf = requestAnimationFrame(draw); return; }
+
+      const dt = Math.min(0.05, (ts - lastTsRef.current) / 1000 || 0.016);
+      lastTsRef.current = ts;
+
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = container.clientWidth;
+      const cssH = container.clientHeight;
+      if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
       }
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
 
-      if (pickMode) {
-        // Start pick: record click position
-        const mp = getMapPixelFromMouse(e);
-        const w = getWorldFromMouse(e);
-        if (mp && w) {
-          const [sx, sy] = mapPxToScreen(mp.px, mp.py);
-          pickDragRef.current = { screenX: sx, screenY: sy, worldX: w.x, worldY: w.y, mapPx: mp.px, mapPy: mp.py };
-          setPickArrow({ sx, sy, ex: sx, ey: sy, yaw: 0 });
+      const t = transformRef.current;
+      const st = stateRef.current || {};
+      const loc = st.locations || {};
+
+      ctx.save();
+      ctx.translate(t.x + cssW / 2, t.y + cssH / 2);
+      ctx.scale(t.scale, t.scale);
+      ctx.translate(-MAP_META.width / 2, -MAP_META.height / 2);
+
+      // Map image
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(imgRef.current, 0, 0);
+      ctx.globalAlpha = 1;
+
+      drawGrid(ctx, t.scale);
+
+      // Lanes
+      (loc.lanes || []).forEach((lane) =>
+        drawLane(ctx, lane.points, "#22d3ee", false, t.scale));
+      if (laneDraftRef.current?.points?.length)
+        drawLane(ctx, laneDraftRef.current.points, "#fbbf24", true, t.scale);
+
+      // Nav2 global plan (live path)
+      if (planRef.current?.length > 1) drawPlan(ctx, planRef.current, t.scale);
+
+      // Dock
+      if (loc.dock && loc.dock.x !== undefined) drawDock(ctx, loc.dock, t.scale);
+
+      // Racks + zones (state-coloured)
+      (loc.racks || []).forEach((r) => drawRack(ctx, r, "rack", t.scale));
+      (loc.drop_zones || []).forEach((z) => drawRack(ctx, z, "zone", t.scale));
+
+      // ── Robot (smoothed) ──
+      const target = st.robot_pose;
+      if (target && Number.isFinite(target.x)) {
+        if (!dispPoseRef.current) dispPoseRef.current = { ...target };
+        const d = dispPoseRef.current;
+        const a = 1 - Math.exp(-12 * dt);   // smoothing factor
+        d.x = lerp(d.x, target.x, a);
+        d.y = lerp(d.y, target.y, a);
+        d.yaw = lerpAngle(d.yaw, target.yaw || 0, a);
+
+        // Trail
+        const trail = trailRef.current;
+        const last = trail[trail.length - 1];
+        if (!last || Math.hypot(last.x - d.x, last.y - d.y) > 0.05) {
+          trail.push({ x: d.x, y: d.y });
+          if (trail.length > 60) trail.shift();
         }
-        return;
+        drawTrail(ctx, trail, t.scale);
+        drawRobot(ctx, d, st.carrying, t.scale);
       }
 
-      // Normal pan
-      dragRef.current = { dragging: true, startX: e.clientX - transform.x, startY: e.clientY - transform.y };
-    },
-    [pickMode, laneDraft, onAddLanePoint, transform, getMapPixelFromMouse, getWorldFromMouse, mapPxToScreen]
-  );
+      ctx.restore();
 
-  const onMouseMove = useCallback(
-    (e) => {
-      const w = getWorldFromMouse(e);
-      if (w) setMouseWorld(w);
+      // Pick arrow (screen space)
+      if (pickArrowRef.current) drawPickArrow(ctx, pickArrowRef.current);
 
-      // Pick drag — update arrow direction
-      if (pickMode && pickDragRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const dx = mx - pickDragRef.current.screenX;
-        const dy = my - pickDragRef.current.screenY;
-        const yaw = Math.atan2(-dy, dx); // Y flipped for screen coords → world yaw
-        setPickArrow({
-          sx: pickDragRef.current.screenX,
-          sy: pickDragRef.current.screenY,
-          ex: mx,
-          ey: my,
-          yaw,
-        });
-        return;
+      raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [imgLoaded]);
+
+  // ── Mouse handlers ────────────────────────────────────────────────
+  const onMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    if (laneDraft) {
+      const w = mouseToWorld(e);
+      if (w && onAddLanePoint) onAddLanePoint(w.x, w.y);
+      return;
+    }
+    if (pickMode) {
+      const mp = mouseToMapPx(e);
+      const w = mouseToWorld(e);
+      if (mp && w) {
+        pickDragRef.current = { cx: mp.cx, cy: mp.cy, worldX: w.x, worldY: w.y };
+        pickArrowRef.current = { sx: mp.cx, sy: mp.cy, ex: mp.cx, ey: mp.cy, yaw: 0 };
       }
+      return;
+    }
+    dragRef.current = { dragging: true, sx: e.clientX - transformRef.current.x, sy: e.clientY - transformRef.current.y };
+  }, [pickMode, laneDraft, onAddLanePoint, mouseToMapPx, mouseToWorld]);
 
-      // Normal pan
-      if (dragRef.current.dragging) {
-        setTransform((t) => ({
-          ...t,
-          x: e.clientX - dragRef.current.startX,
-          y: e.clientY - dragRef.current.startY,
-        }));
-      }
-    },
-    [getWorldFromMouse, pickMode]
-  );
+  const onMouseMove = useCallback((e) => {
+    const w = mouseToWorld(e);
+    if (w) setMouseWorld(w);
 
-  const onMouseUp = useCallback(
-    (e) => {
-      if (pickMode && pickDragRef.current) {
-        const pd = pickDragRef.current;
-        const rect = canvasRef.current.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const dx = mx - pd.screenX;
-        const dy = my - pd.screenY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        // If barely dragged, yaw = 0; otherwise compute from drag direction
-        const yaw = dist > 8 ? Math.atan2(-dy, dx) : 0;
+    if (pickMode && pickDragRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const dx = mx - pickDragRef.current.cx, dy = my - pickDragRef.current.cy;
+      pickArrowRef.current = { sx: pickDragRef.current.cx, sy: pickDragRef.current.cy, ex: mx, ey: my, yaw: Math.atan2(-dy, dx) };
+      return;
+    }
+    if (dragRef.current.dragging) {
+      transformRef.current.x = e.clientX - dragRef.current.sx;
+      transformRef.current.y = e.clientY - dragRef.current.sy;
+    }
+  }, [mouseToWorld, pickMode]);
 
-        pickDragRef.current = null;
-        setPickArrow(null);
-
-        if (onPickPosition) {
-          onPickPosition({ x: pd.worldX, y: pd.worldY, yaw });
-        }
-        return;
-      }
-
-      dragRef.current.dragging = false;
-    },
-    [pickMode, onPickPosition]
-  );
+  const onMouseUp = useCallback((e) => {
+    if (pickMode && pickDragRef.current) {
+      const pd = pickDragRef.current;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const dx = (e.clientX - rect.left) - pd.cx, dy = (e.clientY - rect.top) - pd.cy;
+      const yaw = Math.hypot(dx, dy) > 8 ? Math.atan2(-dy, dx) : 0;
+      pickDragRef.current = null;
+      pickArrowRef.current = null;
+      onPickPosition?.({ x: pd.worldX, y: pd.worldY, yaw });
+      return;
+    }
+    dragRef.current.dragging = false;
+  }, [pickMode, onPickPosition]);
 
   const onMouseLeave = useCallback(() => {
     dragRef.current.dragging = false;
-    if (pickDragRef.current) {
-      pickDragRef.current = null;
-      setPickArrow(null);
-    }
+    pickDragRef.current = null;
+    pickArrowRef.current = null;
     setMouseWorld(null);
   }, []);
 
-  // Zoom
+  // Zoom toward cursor
   const onWheel = useCallback((e) => {
     e.preventDefault();
-    setTransform((t) => ({
-      ...t,
-      scale: Math.max(0.2, Math.min(4, t.scale - e.deltaY * 0.001)),
-    }));
-  }, []);
+    const mp = mouseToMapPx(e);
+    const t = transformRef.current;
+    const next = Math.max(0.2, Math.min(6, t.scale * (1 - e.deltaY * 0.0015)));
+    if (mp) {
+      t.x = mp.cx - (mp.px - MAP_META.width / 2) * next - canvasRef.current.getBoundingClientRect().width / 2;
+      t.y = mp.cy - (mp.py - MAP_META.height / 2) * next - canvasRef.current.getBoundingClientRect().height / 2;
+    }
+    t.scale = next;
+  }, [mouseToMapPx]);
 
-  // Right-click toggles the state of the rack/zone under the cursor.
-  // Free ↔ occupied — the mission_manager republishes /rack_obstacles
-  // and Nav2 picks up the change on its next costmap update.
-  const onContextMenu = useCallback(
-    (e) => {
-      e.preventDefault();
-      const w = getWorldFromMouse(e);
-      if (!w) return;
-      const half = 0.95 / 2;
-      const all = [
-        ...(missionState.locations?.racks || []),
-        ...(missionState.locations?.drop_zones || []),
-      ];
-      // Find the location whose square contains the click point (in its local frame).
-      let hit = null;
-      for (const loc of all) {
-        const yaw = loc.yaw || 0;
-        const dx = w.x - loc.x;
-        const dy = w.y - loc.y;
-        const lx = dx * Math.cos(-yaw) - dy * Math.sin(-yaw);
-        const ly = dx * Math.sin(-yaw) + dy * Math.cos(-yaw);
-        if (Math.abs(lx) <= half && Math.abs(ly) <= half) {
-          hit = loc;
-          break;
-        }
-      }
-      if (!hit) return;
-      const next = (hit.state || "occupied") === "occupied" ? "free" : "occupied";
-      sendCommand({ action: "set_location_state", id: hit.id, state: next });
-    },
-    [getWorldFromMouse, missionState.locations, sendCommand]
-  );
-
-  // Double click to navigate, or finish lane draft if drawing
-  const onDblClick = useCallback(
-    (e) => {
-      if (laneDraft) {
-        // The first mousedown of the double-click already added a point;
-        // commit the polyline now.
-        if (onFinishLaneDraft) onFinishLaneDraft();
+  const onContextMenu = useCallback((e) => {
+    e.preventDefault();
+    const w = mouseToWorld(e);
+    if (!w) return;
+    const half = RACK_SIDE / 2;
+    const all = [...(missionState.locations?.racks || []), ...(missionState.locations?.drop_zones || [])];
+    for (const l of all) {
+      const yaw = l.yaw || 0;
+      const dx = w.x - l.x, dy = w.y - l.y;
+      const lx = dx * Math.cos(-yaw) - dy * Math.sin(-yaw);
+      const ly = dx * Math.sin(-yaw) + dy * Math.cos(-yaw);
+      if (Math.abs(lx) <= half && Math.abs(ly) <= half) {
+        const next = (l.state || "occupied") === "occupied" ? "free" : "occupied";
+        sendCommand({ action: "set_location_state", id: l.id, state: next });
         return;
       }
-      if (pickMode) return;
-      const w = getWorldFromMouse(e);
-      if (!w) return;
-      sendCommand({
-        action: "navigate_to",
-        x: w.x,
-        y: w.y,
-        yaw: 0,
-        name: `(${w.x.toFixed(1)}, ${w.y.toFixed(1)})`,
-      });
-    },
-    [getWorldFromMouse, sendCommand, pickMode, laneDraft, onFinishLaneDraft]
-  );
+    }
+  }, [mouseToWorld, missionState.locations, sendCommand]);
+
+  const onDblClick = useCallback((e) => {
+    if (laneDraft) { onFinishLaneDraft?.(); return; }
+    if (pickMode) return;
+    const w = mouseToWorld(e);
+    if (!w) return;
+    sendCommand({ action: "navigate_to", x: w.x, y: w.y, yaw: 0, name: `(${w.x.toFixed(1)}, ${w.y.toFixed(1)})` });
+  }, [mouseToWorld, sendCommand, pickMode, laneDraft, onFinishLaneDraft]);
+
+  const zoomBy = (f) => {
+    const t = transformRef.current;
+    t.scale = Math.max(0.2, Math.min(6, t.scale * f));
+  };
 
   return (
     <div className="map-area" ref={containerRef}>
@@ -509,25 +306,249 @@ export default function MapCanvas({
         onDoubleClick={onDblClick}
         onContextMenu={onContextMenu}
       />
+
+      {/* Legend */}
+      <div className="map-legend">
+        <span><i className="lg lg--free" />Free</span>
+        <span><i className="lg lg--occ" />Occupied</span>
+        <span><i className="lg lg--lane" />Lane</span>
+        <span><i className="lg lg--plan" />Path</span>
+        <span><i className="lg lg--robot" />Robot</span>
+      </div>
+
       {mouseWorld && (
         <div className="map-coords">
-          x: {mouseWorld.x.toFixed(2)} &nbsp; y: {mouseWorld.y.toFixed(2)}
+          x&nbsp;{mouseWorld.x.toFixed(2)} &nbsp; y&nbsp;{mouseWorld.y.toFixed(2)}
         </div>
       )}
-      {pickMode && (
-        <div className="map-pick-banner">📍 Click &amp; drag to set position + heading</div>
-      )}
+      {pickMode && <div className="map-pick-banner">📍 Click &amp; drag to set position + heading</div>}
       {laneDraft && (
         <div className="map-pick-banner">
-          🛣 Lane drawing — click to add points ({laneDraft.points.length}),
-          double-click to finish
+          🛣 Lane — click to add points ({laneDraft.points.length}), double-click to finish
         </div>
       )}
       <div className="map-overlay">
-        <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.min(4, t.scale + 0.2) }))}>+</button>
-        <button className="btn btn--sm btn--icon" onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.2, t.scale - 0.2) }))}>−</button>
-        <button className="btn btn--sm btn--icon" onClick={() => setTransform({ x: 0, y: 0, scale: 0.8 })}>⟲</button>
+        <button className="btn btn--sm btn--icon" onClick={() => zoomBy(1.25)}>+</button>
+        <button className="btn btn--sm btn--icon" onClick={() => zoomBy(0.8)}>−</button>
+        <button className="btn btn--sm btn--icon" onClick={() => { transformRef.current = { x: 0, y: 0, scale: 0.85 }; }}>⟲</button>
       </div>
     </div>
   );
+}
+
+/* ── Draw helpers (map-pixel space unless noted) ───────────────────── */
+function drawGrid(ctx, scale) {
+  const step = PX_PER_M; // 1 m
+  ctx.lineWidth = 1 / scale;
+  for (let i = 0; i <= MAP_META.width; i += step) {
+    const major = Math.round(i / step) % 5 === 0;
+    ctx.strokeStyle = major ? "rgba(148,163,184,0.10)" : "rgba(148,163,184,0.045)";
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, MAP_META.height); ctx.stroke();
+  }
+  for (let j = 0; j <= MAP_META.height; j += step) {
+    const major = Math.round(j / step) % 5 === 0;
+    ctx.strokeStyle = major ? "rgba(148,163,184,0.10)" : "rgba(148,163,184,0.045)";
+    ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(MAP_META.width, j); ctx.stroke();
+  }
+}
+
+function drawLane(ctx, points, color, dashed, scale) {
+  if (!points || points.length === 0) return;
+  const pts = points.map((p) => worldToPixel(p.x, p.y));
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // Glow
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.18;
+  ctx.lineWidth = 9 / scale;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  // Core
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 2.5 / scale;
+  if (dashed) ctx.setLineDash([8 / scale, 5 / scale]);
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Vertices
+  pts.forEach(([x, y]) => {
+    ctx.beginPath(); ctx.arc(x, y, 4 / scale, 0, Math.PI * 2);
+    ctx.fillStyle = "#0a0e17"; ctx.fill();
+    ctx.lineWidth = 2 / scale; ctx.strokeStyle = color; ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function drawPlan(ctx, plan, scale) {
+  const pts = plan.map((p) => worldToPixel(p.x, p.y));
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // glow
+  ctx.strokeStyle = "#a855f7";
+  ctx.globalAlpha = 0.20;
+  ctx.lineWidth = 8 / scale;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  // core (dashed, animated feel via map)
+  ctx.globalAlpha = 0.95;
+  ctx.strokeStyle = "#c084fc";
+  ctx.lineWidth = 2 / scale;
+  ctx.setLineDash([7 / scale, 5 / scale]);
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawDock(ctx, dock, scale) {
+  const [x, y] = worldToPixel(dock.x, dock.y);
+  ctx.save();
+  ctx.translate(x, y);
+  const r = 9 / scale;
+  ctx.fillStyle = "rgba(245,158,11,0.18)";
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#f59e0b";
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a1a1a";
+  ctx.font = `${11 / scale}px sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("⌂", 0, 0.5 / scale);
+  ctx.restore();
+  drawLabel(ctx, x, y - 16 / scale, dock.name || "Dock", "#f59e0b", scale);
+}
+
+function drawRack(ctx, loc, kind, scale) {
+  const [x, y] = worldToPixel(loc.x, loc.y);
+  const yaw = -(loc.yaw || 0);
+  const occupied = (loc.state || (kind === "rack" ? "occupied" : "free")) === "occupied";
+  const half = (RACK_SIDE / 2) * PX_PER_M;
+  const stroke = occupied ? "#ef4444" : "#22c55e";
+  const fill = occupied ? "rgba(239,68,68,0.20)" : "rgba(34,197,94,0.16)";
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(yaw);
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2 / scale;
+  roundRect(ctx, -half, -half, half * 2, half * 2, 3 / scale);
+  ctx.fill();
+  ctx.stroke();
+  // corner legs
+  ctx.fillStyle = stroke;
+  [[-half, -half], [half, -half], [half, half], [-half, half]].forEach(([lx, ly]) => {
+    ctx.beginPath(); ctx.arc(lx, ly, 2.4 / scale, 0, Math.PI * 2); ctx.fill();
+  });
+  // heading tick (approach direction)
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2 / scale;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(half, 0); ctx.stroke();
+  ctx.restore();
+
+  drawLabel(ctx, x, y - half - 9 / scale, loc.name || loc.id, stroke, scale);
+}
+
+function drawTrail(ctx, trail, scale) {
+  if (trail.length < 2) return;
+  ctx.save();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (let i = 1; i < trail.length; i++) {
+    const [x0, y0] = worldToPixel(trail[i - 1].x, trail[i - 1].y);
+    const [x1, y1] = worldToPixel(trail[i].x, trail[i].y);
+    ctx.globalAlpha = (i / trail.length) * 0.5;
+    ctx.strokeStyle = "#3b82f6";
+    ctx.lineWidth = 2.5 / scale;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRobot(ctx, pose, carrying, scale) {
+  const [x, y] = worldToPixel(pose.x, pose.y);
+  const yaw = -(pose.yaw || 0);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(yaw);
+
+  if (carrying) {
+    const rh = (RACK_SIDE / 2) * PX_PER_M;
+    ctx.strokeStyle = "rgba(139,92,246,0.9)";
+    ctx.fillStyle = "rgba(139,92,246,0.12)";
+    ctx.lineWidth = 1.5 / scale;
+    roundRect(ctx, -rh, -rh, rh * 2, rh * 2, 3 / scale);
+    ctx.fill(); ctx.stroke();
+  }
+
+  const hl = (ROBOT_LEN / 2) * PX_PER_M;
+  const hw = (ROBOT_WID / 2) * PX_PER_M;
+  // glow
+  ctx.shadowColor = "rgba(59,130,246,0.7)";
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = "rgba(59,130,246,0.85)";
+  ctx.strokeStyle = "#93c5fd";
+  ctx.lineWidth = 1.5 / scale;
+  roundRect(ctx, -hl, -hw, hl * 2, hw * 2, 4 / scale);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.stroke();
+  // heading wedge
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(hl * 0.95, 0);
+  ctx.lineTo(hl * 0.2, -hw * 0.55);
+  ctx.lineTo(hl * 0.2, hw * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawLabel(ctx, x, y, text, color, scale) {
+  if (!text) return;
+  ctx.save();
+  ctx.font = `600 ${11 / scale}px Inter, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  const w = ctx.measureText(text).width + 10 / scale;
+  const h = 15 / scale;
+  ctx.fillStyle = "rgba(10,14,23,0.78)";
+  roundRect(ctx, x - w / 2, y - h, w, h, 4 / scale);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y - 2.5 / scale);
+  ctx.restore();
+}
+
+function drawPickArrow(ctx, a) {
+  ctx.save();
+  ctx.strokeStyle = "#fbbf24"; ctx.fillStyle = "#fbbf24"; ctx.lineWidth = 2.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(a.ex, a.ey); ctx.stroke();
+  ctx.setLineDash([]);
+  const ang = Math.atan2(a.ey - a.sy, a.ex - a.sx);
+  ctx.beginPath();
+  ctx.moveTo(a.ex, a.ey);
+  ctx.lineTo(a.ex - 10 * Math.cos(ang - 0.4), a.ey - 10 * Math.sin(ang - 0.4));
+  ctx.lineTo(a.ex - 10 * Math.cos(ang + 0.4), a.ey - 10 * Math.sin(ang + 0.4));
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.arc(a.sx, a.sy, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.font = "600 11px Inter, sans-serif"; ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+  ctx.fillText(`${((a.yaw * 180) / Math.PI).toFixed(0)}°`, a.ex + 8, a.ey - 4);
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }

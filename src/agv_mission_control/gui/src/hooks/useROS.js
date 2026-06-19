@@ -15,16 +15,20 @@ const DEFAULT_STATE = {
   current_task: null,
   current_step: "",
   progress: 0,
+  carrying: false,
+  speed: 0.4,
   queue: [],
-  locations: { dock: { x: 0, y: 0, yaw: 0, name: "Dock" }, racks: [], drop_zones: [] },
+  locations: { dock: { x: 0, y: 0, yaw: 0, name: "Dock" }, racks: [], drop_zones: [], lanes: [] },
 };
 
 export function useROS() {
   const [connected, setConnected] = useState(false);
   const [missionState, setMissionState] = useState(DEFAULT_STATE);
   const [feedbackLog, setFeedbackLog] = useState([]);
+  const [plan, setPlan] = useState([]);
   const rosRef = useRef(null);
   const cmdPubRef = useRef(null);
+  const planClearRef = useRef(null);
 
   useEffect(() => {
     let ros;
@@ -61,8 +65,10 @@ export function useROS() {
       try {
         const data = JSON.parse(msg.data);
         if (data && typeof data === "object") {
-          // Merge with defaults so we never lose required fields
-          setMissionState((prev) => ({
+          // Merge with defaults so we never lose required fields.
+          // NOTE: lanes MUST be carried through here — they were being
+          // dropped, which is why drawn lanes never re-appeared.
+          setMissionState(() => ({
             ...DEFAULT_STATE,
             ...data,
             robot_pose: { ...DEFAULT_STATE.robot_pose, ...(data.robot_pose || {}) },
@@ -70,6 +76,7 @@ export function useROS() {
               dock: { ...DEFAULT_STATE.locations.dock, ...(data.locations?.dock || {}) },
               racks: Array.isArray(data.locations?.racks) ? data.locations.racks : [],
               drop_zones: Array.isArray(data.locations?.drop_zones) ? data.locations.drop_zones : [],
+              lanes: Array.isArray(data.locations?.lanes) ? data.locations.lanes : [],
             },
           }));
         }
@@ -95,6 +102,26 @@ export function useROS() {
       }
     });
 
+    // ── Subscribe to the global plan (Nav2) ──────────────────────
+    const planTopic = new ROSLIB.Topic({
+      ros,
+      name: "/plan",
+      messageType: "nav_msgs/msg/Path",
+      throttle_rate: 200,
+      queue_length: 1,
+    });
+    planTopic.subscribe((msg) => {
+      const pts = (msg.poses || []).map((p) => ({
+        x: p.pose.position.x,
+        y: p.pose.position.y,
+      }));
+      setPlan(pts);
+      // Auto-clear: Nav2 stops publishing /plan when idle, so drop the
+      // stale path ~1.5 s after the last update.
+      if (planClearRef.current) clearTimeout(planClearRef.current);
+      planClearRef.current = setTimeout(() => setPlan([]), 1500);
+    });
+
     // ── Publisher: commands ───────────────────────────────────────
     cmdPubRef.current = new ROSLIB.Topic({
       ros,
@@ -106,6 +133,8 @@ export function useROS() {
       try {
         stateTopic.unsubscribe();
         feedbackTopic.unsubscribe();
+        planTopic.unsubscribe();
+        if (planClearRef.current) clearTimeout(planClearRef.current);
         ros.close();
       } catch (e) {
         /* ignore cleanup errors */
@@ -127,6 +156,7 @@ export function useROS() {
     connected,
     missionState,
     feedbackLog,
+    plan,
     sendCommand,
     ros: rosRef,
   };

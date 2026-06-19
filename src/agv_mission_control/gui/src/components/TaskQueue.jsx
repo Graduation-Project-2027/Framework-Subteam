@@ -115,8 +115,11 @@ function AddTaskModal({ missionState, sendCommand, onClose }) {
         rack_id: from.id,
         from_name: from.name || from.id,
         to_name: to.name || to.id,
-        from: { x: from.x, y: from.y, yaw: from.yaw || 0 },
-        to: { x: to.x, y: to.y, yaw: to.yaw || 0 },
+        // id MUST be included — the backend keys its free/occupied state
+        // updates off from.id / to.id.  Without it R1 never goes green and
+        // R8 never goes red after a transport.
+        from: { id: from.id, name: from.name, x: from.x, y: from.y, yaw: from.yaw || 0 },
+        to: { id: to.id, name: to.name, x: to.x, y: to.y, yaw: to.yaw || 0 },
       });
     } else if (type === "navigate" && to) {
       sendCommand({

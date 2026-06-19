@@ -37,6 +37,11 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 6px 18px rgba(0,0,0,0.35);
+  --shadow-lg: 0 18px 40px rgba(0,0,0,0.45);
 
   --gap-xs: 4px;
   --gap-sm: 8px;
@@ -796,3 +801,131 @@ body {
   background: var(--border-color);
   margin: var(--gap-sm) 0;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Visual overhaul — depth, refinement, map legend
+   (appended; overrides earlier rules, preserves all class names)
+   ════════════════════════════════════════════════════════════════════ */
+
+body {
+  background:
+    radial-gradient(1200px 800px at 75% -10%, rgba(59,130,246,0.07), transparent 60%),
+    radial-gradient(1000px 700px at 0% 110%, rgba(6,182,212,0.06), transparent 55%),
+    var(--bg-primary);
+}
+
+.app { gap: 0; }
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.header {
+  background: linear-gradient(180deg, #131c2e, var(--bg-secondary));
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  z-index: 5;
+}
+.header__logo h1 { font-size: 15px; letter-spacing: 0.4px; }
+.header__logo-icon { box-shadow: var(--glow-blue); }
+
+/* ── Panels & sidebars ──────────────────────────────────────────────── */
+.sidebar-left, .sidebar-right { box-shadow: inset -1px 0 0 var(--border-color); }
+.sidebar-right { box-shadow: inset 1px 0 0 var(--border-color); }
+
+.panel { background: var(--bg-secondary); }
+.panel__header {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(4px);
+}
+.panel__title { color: var(--text-secondary); }
+
+/* ── Buttons: subtle gradient + smoother feedback ───────────────────── */
+.btn {
+  background: linear-gradient(180deg, var(--bg-tertiary), #141d2e);
+  transition: transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(0.98); }
+.btn--primary { background: linear-gradient(180deg, #4892f8, var(--accent-primary)); }
+.btn--success { background: linear-gradient(180deg, #14c98e, var(--accent-success)); }
+.btn--danger  { background: linear-gradient(180deg, #f55b5b, var(--accent-danger)); }
+.btn--warning { background: linear-gradient(180deg, #fbb43a, var(--accent-warning)); }
+
+/* ── Map area: framed, vignette ─────────────────────────────────────── */
+.map-area {
+  background:
+    radial-gradient(120% 120% at 50% 40%, #0c1422 0%, #070b12 100%);
+  box-shadow: inset 0 0 120px rgba(0,0,0,0.55);
+}
+.map-canvas { width: 100%; height: 100%; }
+
+.map-coords, .map-overlay .btn {
+  background: rgba(13,19,30,0.82);
+  border: 1px solid var(--border-active);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+}
+.map-overlay .btn:hover { background: var(--bg-hover); }
+.map-coords { letter-spacing: 0.5px; }
+
+.map-pick-banner {
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+  background: linear-gradient(180deg, #fbbf24, var(--accent-warning));
+}
+
+/* ── Map legend ─────────────────────────────────────────────────────── */
+.map-legend {
+  position: absolute;
+  top: var(--gap-md);
+  left: var(--gap-md);
+  display: flex;
+  gap: var(--gap-md);
+  align-items: center;
+  padding: 7px 12px;
+  background: rgba(13,19,30,0.82);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  user-select: none;
+}
+.map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.lg--free  { background: rgba(34,197,94,0.35);  border: 1.5px solid #22c55e; }
+.lg--occ   { background: rgba(239,68,68,0.30);   border: 1.5px solid #ef4444; }
+.lg--lane  { width: 14px; height: 0; border: 0; border-top: 3px solid #22d3ee; border-radius: 2px; }
+.lg--plan  { width: 14px; height: 0; border: 0; border-top: 3px dashed #c084fc; }
+.lg--robot { border-radius: 50%; background: var(--accent-primary); box-shadow: 0 0 6px rgba(59,130,246,0.8); }
+
+/* ── Bottom bar ─────────────────────────────────────────────────────── */
+.bottom-bar { box-shadow: inset 0 1px 0 var(--border-color); }
+.teleop, .speed-control, .console { background: var(--bg-secondary); }
+
+/* ── Scrollbars (firefox + webkit) ──────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: var(--border-active) transparent; }
+
+/* ── Location rows: clearer state dots ──────────────────────────────── */
+.location-item__dot { box-shadow: 0 0 0 3px rgba(255,255,255,0.04); }
+
+/* ── Inputs ─────────────────────────────────────────────────────────── */
+.input { background: var(--bg-primary); }
+.input:focus { box-shadow: 0 0 0 3px rgba(59,130,246,0.18); }
+
+/* ── Modal depth ────────────────────────────────────────────────────── */
+.modal { box-shadow: var(--shadow-lg); border-radius: var(--radius-lg); }
+
+/* ── System launcher (header) ───────────────────────────────────────── */
+.header__logo { gap: var(--gap-md); }
+.launcher { display: flex; align-items: center; gap: var(--gap-sm); margin-left: var(--gap-md);
+  padding-left: var(--gap-md); border-left: 1px solid var(--border-color); }
+.launcher__chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+  padding: 4px 10px; border-radius: var(--radius-full); }
+.launcher__chip--on { background: rgba(16,185,129,0.14); color: var(--accent-success);
+  border: 1px solid rgba(16,185,129,0.3); }
+.launcher__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.launcher__dot--on { background: var(--accent-success); box-shadow: var(--glow-green);
+  animation: pulse-glow 1.6s ease-in-out infinite; }
+.launcher--offline { font-size: 11px; color: var(--text-muted); opacity: 0.7; }

@@ -7,3 +7,4 @@ log
 *.log
 todo.md
 .claude
+src/**/__pycache__/*

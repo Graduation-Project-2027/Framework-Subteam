@@ -200,6 +200,14 @@ class MissionManagerNode(Node):
             '/global_costmap/global_costmap/set_parameters',
             callback_group=self.cb_group,
         )
+        # Velocity smoother — caps the autonomous travel speed.  The GUI
+        # speed slider drives this so it actually affects mission speed
+        # (not just teleop).
+        self._smoother_param_cli = self.create_client(
+            SetParameters,
+            '/velocity_smoother/set_parameters',
+            callback_group=self.cb_group,
+        )
 
         # ── Nav2 action client ───────────────────────────────────────
         self._nav_client = ActionClient(
@@ -317,7 +325,9 @@ class MissionManagerNode(Node):
         self.p_dock_kx   = g("dock_gain_x", 0.9).double_value
         self.p_dock_ky   = g("dock_gain_y", 1.1).double_value
         self.p_dock_kth  = g("dock_gain_yaw", 1.4).double_value
-        self.p_dock_vx_max = g("dock_vx_max", 0.22).double_value
+        # Higher vx_max gives the robot momentum to carry through the
+        # stiction catch as the wheels pass between the near legs.
+        self.p_dock_vx_max = g("dock_vx_max", 0.28).double_value
         self.p_dock_vy_max = g("dock_vy_max", 0.18).double_value
         self.p_dock_wz_max = g("dock_wz_max", 0.6).double_value
         # Convergence tolerances (must hold for dock_converge_count cycles).
@@ -361,9 +371,12 @@ class MissionManagerNode(Node):
         # rack entrance).  After dock_stall_time of this, we punch the
         # command up to dock_breakaway_v to break free, then resume normal
         # control.  Uses the act_v we already measure — no manual push.
+        # Stalled = commanding motion but achieving less than stall_ratio of
+        # it (catches a partial drag at the rack mouth, not just a dead stop).
         self.p_stall_speed_eps = g("stall_speed_eps", 0.03).double_value
-        self.p_stall_time      = g("stall_time", 0.6).double_value
-        self.p_breakaway_v     = g("breakaway_velocity", 0.45).double_value
+        self.p_stall_ratio     = g("stall_ratio", 0.4).double_value
+        self.p_stall_time      = g("stall_time", 0.35).double_value
+        self.p_breakaway_v     = g("breakaway_velocity", 0.55).double_value
 
         # Extraction / retreat clearances.  Default = rack_half + robot_half
         # + margin so the carried rack ends fully in the aisle.
@@ -670,7 +683,23 @@ class MissionManagerNode(Node):
         speed = float(cmd.get("speed", 0.4))
         speed = max(0.1, min(1.0, speed))
         self._speed_multiplier = speed
+        self._set_nav_max_speed(speed)
         self._log(f"Max speed set to {speed:.2f} m/s")
+
+    def _set_nav_max_speed(self, speed):
+        """Cap the autonomous travel speed via the velocity_smoother.
+
+        The smoother sits at the end of the Nav2 velocity pipeline, so its
+        max_velocity bounds how fast the robot drives during missions.  (The
+        closed-loop docking/extract moves publish /cmd_vel directly and are
+        intentionally governed by their own slow params.)
+        """
+        param = RclParameter(
+            name='max_velocity',
+            value=ParameterValue(
+                type=ParameterType.PARAMETER_DOUBLE_ARRAY,
+                double_array_value=[float(speed), float(speed), 1.5]))
+        self._apply_params(self._smoother_param_cli, "velocity_smoother", [param])
 
     def _handle_lift(self, cmd):
         height = float(cmd.get("height", 0.0))
@@ -1604,7 +1633,12 @@ class MissionManagerNode(Node):
         """
         cmd_mag = math.hypot(vx, vy)
         act_mag = math.hypot(self._odom_vel[0], self._odom_vel[1])
-        if cmd_mag > self.p_stall_speed_eps and act_mag < self.p_stall_speed_eps:
+        # Stalled if we want to move but are dragging at < stall_ratio of the
+        # command (or essentially stopped).  This catches the partial drag at
+        # the rack mouth where act never quite reaches zero.
+        stall_thresh = max(self.p_stall_speed_eps,
+                           self.p_stall_ratio * cmd_mag)
+        if cmd_mag > self.p_stall_speed_eps and act_mag < stall_thresh:
             now = time.time()
             if stall_since is None:
                 return vx, vy, now
