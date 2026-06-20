@@ -2,8 +2,10 @@
 <sdf version="1.9">
   <model name="rack">
     <!-- Dynamic (non-static) so the AMR can lift it via shelf_1 contact.
-         Robot stowed h=0.30 fits under shelf_1 (z_bottom=0.35, 0.05 clearance),
-         lift stroke=0.15 raises rack by 0.10 (shelf_1 bottom: 0.35 -> 0.45). -->
+         Rack geometry is UNCHANGED for the new short-stroke lift; instead the
+         lift mechanism is mounted higher (see lift.urdf.xacro).
+         shelf_1 underside = 0.35.  New lift table: stowed top 0.320 (0.030
+         clearance to drive under), 5 cm stroke -> raised top 0.370 -> lifts ~0.020. -->
 
     <link name="base">
       <inertial>

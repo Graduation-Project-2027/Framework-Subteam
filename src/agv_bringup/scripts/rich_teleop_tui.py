@@ -125,9 +125,9 @@ class RichTeleopNode(Node):
         self.declare_parameter("linear_speed", 1.5)
         self.declare_parameter("strafe_speed", 0.5)
         self.declare_parameter("angular_speed", 1.0)
-        self.declare_parameter("lift_step", 0.015)
+        self.declare_parameter("lift_step", 0.01)
         self.declare_parameter("lift_min", 0.0)
-        self.declare_parameter("lift_max", 0.5)
+        self.declare_parameter("lift_max", 0.05)   # new 5 cm physical stroke
         self.declare_parameter("linear_speed_step", 0.1)
         self.declare_parameter("linear_speed_min", 0.1)
         self.declare_parameter("linear_speed_max", 3.0)

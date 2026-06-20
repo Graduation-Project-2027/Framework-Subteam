@@ -76,7 +76,7 @@ mission_manager:
     inflation_radius_carrying: 0.25
 
     # ── Transport task timing ─────────────────────────────────────────
-    lift_height: 0.20         # lift target — matches URDF lift_range (0.20)
+    lift_height: 0.05         # lift target — matches URDF lift_range (new 5 cm stroke)
     lift_wait_time: 6.0       # seconds to wait after sending lift command
     costmap_settle_time: 1.0  # seconds to wait after carrying mode switch
     drop_wait_time: 5.0       # let the rack fully settle before reversing out

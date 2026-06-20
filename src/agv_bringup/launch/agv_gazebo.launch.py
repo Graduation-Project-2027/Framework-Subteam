@@ -10,6 +10,7 @@ from launch.substitutions import (
     PythonExpression,
 )
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -126,12 +127,15 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "robot_description": Command(
-                    [
-                        "xacro ",
-                        urdf_file_single,
-                        " use_gazebo:=true",
-                    ]
+                "robot_description": ParameterValue(
+                    Command(
+                        [
+                            "xacro ",
+                            urdf_file_single,
+                            " use_gazebo:=true",
+                        ]
+                    ),
+                    value_type=str,
                 ),
                 "use_sim_time": True,
             },
@@ -158,12 +162,15 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "robot_description": Command(
-                    [
-                        "xacro ",
-                        urdf_file_2_lidars,
-                        " use_gazebo:=true",
-                    ]
+                "robot_description": ParameterValue(
+                    Command(
+                        [
+                            "xacro ",
+                            urdf_file_2_lidars,
+                            " use_gazebo:=true",
+                        ]
+                    ),
+                    value_type=str,
                 ),
                 "use_sim_time": True,
             },
@@ -190,12 +197,15 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "robot_description": Command(
-                    [
-                        "xacro ",
-                        urdf_file_override,
-                        " use_gazebo:=true",
-                    ]
+                "robot_description": ParameterValue(
+                    Command(
+                        [
+                            "xacro ",
+                            urdf_file_override,
+                            " use_gazebo:=true",
+                        ]
+                    ),
+                    value_type=str,
                 ),
                 "use_sim_time": True,
             },
