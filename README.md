@@ -46,6 +46,10 @@ then open <http://localhost:5173/?preview>).
 
 Build and upload using the PlatformIO extension or CLI from the firmware directory. The firmware's ST-Link upload configuration is defined in `platformio.ini`.
 
+### E-stop controller (Blackpill)
+
+[`STM32_CANbus_Embedded/Blackpill_CAN_Software/`](STM32_CANbus_Embedded/Blackpill_CAN_Software/README.md) is the firmware of the BODY node: a WeAct Blackpill (STM32F411CEU6) with an MCP2515 CAN controller. It is the robot's e-stop authority. It switches the relay that powers the hoverboard board, reads the e-stop button, trips when the Pi stops sending commands, and reports `SAFETY_STATUS` on the bus. **Blackpill Tool.bat** builds it, uploads over SWD (ST-Link) or USB DFU, and has a serial terminal with a live status panel.
+
 ### Raspberry Pi ROS 2 framework
 
 [`RaspberryPi_ROS2/`](RaspberryPi_ROS2/) contains the ROS 2 AMR framework that runs on the robot's Raspberry Pi 5. Its packages cover the robot description, hardware drivers (CAN bridge to the hoverboard board and the e-stop controller, MPU9250 IMU, two RPLidar A1M8), mapping, localization, navigation, teleoperation, and web-based mission control. Every launch file targets the real robot by default; `sim:=true` runs the same stack in Gazebo with RViz.

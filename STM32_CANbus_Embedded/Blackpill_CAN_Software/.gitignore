@@ -1,0 +1,5 @@
+.pio/
+.vscode/
+tools/__pycache__/
+safety_test
+safety_test.exe

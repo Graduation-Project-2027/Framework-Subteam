@@ -89,6 +89,10 @@ circuit of the original hoverboard) so it boots by itself when the relay closes.
 
 ### E-stop controller (STM32F411CEU6, `BODY` node)
 
+Firmware, wiring and the build/upload tool:
+[STM32_CANbus_Embedded/Blackpill_CAN_Software](../../STM32_CANbus_Embedded/Blackpill_CAN_Software/README.md)
+(Blackpill + MCP2515; an 8 MHz MCP2515 crystal limits the whole bus to 500 kbit/s).
+
 The STM32F411 is the e-stop authority. It switches the relay that powers the hoverboard board and
 has the physical e-stop button. Its required behaviour (documented in the DBC):
 
