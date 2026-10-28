@@ -1,4 +1,4 @@
-VERSION "hoverboard-agv-1"
+VERSION "hoverboard-amr-1"
 
 
 NS_ :
@@ -11,11 +11,18 @@ NS_ :
 
 BS_:
 
-BU_: PI HOVERBOARD LIFT
+BU_: PI HOVERBOARD BODY
 
 
 BO_ 16 ESTOP: 1 PI
- SG_ estop : 0|1@1+ (1,0) [0|1] "" HOVERBOARD,LIFT
+ SG_ estop : 0|1@1+ (1,0) [0|1] "" HOVERBOARD,BODY
+
+BO_ 17 SAFETY_STATUS: 2 BODY
+ SG_ estop_active : 0|1@1+ (1,0) [0|1] "" PI
+ SG_ hoverboard_power : 1|1@1+ (1,0) [0|1] "" PI
+ SG_ button_pressed : 2|1@1+ (1,0) [0|1] "" PI
+ SG_ estop_cause : 4|3@1+ (1,0) [0|7] "" PI
+ SG_ heartbeat : 8|8@1+ (1,0) [0|255] "" PI
 
 BO_ 513 HB_CMD: 4 PI
  SG_ cmd_left : 0|16@1- (1,0) [-32768|32767] "rpm" HOVERBOARD
@@ -51,8 +58,12 @@ BO_ 897 HB_STATUS: 8 HOVERBOARD
 CM_ "Hoverboard mainboard (VARIANT_CAN) protocol. IDs shown for CAN_NODE_ID = 1: CMD 0x200+n, ODOM 0x180+n, MOTION 0x280+n, STATUS 0x380+n. All wheel values: positive = robot moves forward.";
 CM_ BU_ PI "Raspberry Pi 5 host (ROS 2).";
 CM_ BU_ HOVERBOARD "Hoverboard mainboard STM32F103RC, hoverboard-firmware-hack VARIANT_CAN.";
-CM_ BU_ LIFT "STM32F411 lift / lights controller.";
-CM_ BO_ 16 "E-stop broadcast. 1 = stop (latched), 0 = release. Hoverboard: active braking to 0 rpm.";
+CM_ BU_ BODY "STM32F411CEU6 body controller: e-stop authority (switches the relay powering the hoverboard board), lift, lights, buzzer.";
+CM_ BO_ 16 "E-stop broadcast. 1 = stop (latched), 0 = release. Hoverboard: active braking to 0 rpm. BODY: latches the e-stop and opens the hoverboard power relay once the wheels are braked; on release closes it (refused while the button is pressed). BODY also sends ESTOP=1 itself when its button is pressed.";
+CM_ BO_ 17 "E-stop controller state, 10 Hz and immediately on change. BODY also trips the e-stop if no HB_CMD frame is seen for 500 ms (host watchdog).";
+CM_ SG_ 17 hoverboard_power "1 = relay closed, hoverboard board powered.";
+CM_ SG_ 17 button_pressed "Physical e-stop button currently pressed.";
+CM_ SG_ 17 estop_cause "Cause of the active or last e-stop.";
 CM_ BO_ 513 "Wheel speed command, send at 50 Hz. SPD_MODE: rpm, clamped to N_MOT_MAX. VLT/TRQ mode: normalized -1000..1000. No frame for 200 ms (CAN_TIMEOUT): motors de-energized.";
 CM_ BO_ 385 "Hall-sensor odometry, 50 Hz. 6 steps per electrical revolution (~90 per wheel revolution on 15 pole-pair hub motors). Counters wrap: use int32 differences. Reset to 0 at board power-on.";
 CM_ BO_ 641 "Measured wheel speed and DC link current per motor, 50 Hz. Current averaged over the frame period.";
@@ -63,3 +74,4 @@ CM_ SG_ 897 err_right "BLDC controller error code: bit0 hall sensors not connect
 CM_ SG_ 897 safe_state "Any input timeout active: motors de-energized (OPEN_MODE).";
 CM_ SG_ 897 can_error_counter "max(TEC, REC) of the bxCAN controller. Rising values indicate bit timing / wiring problems.";
 CM_ SG_ 897 heartbeat "Increments by 1 per status frame.";
+VAL_ 17 estop_cause 0 "none" 1 "host_request" 2 "button" 3 "host_timeout" ;

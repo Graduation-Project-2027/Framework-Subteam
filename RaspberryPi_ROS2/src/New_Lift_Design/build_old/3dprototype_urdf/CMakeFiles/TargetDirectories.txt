@@ -1,9 +1,0 @@
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/uninstall.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/3dprototype_urdf_uninstall.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/test.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/edit_cache.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/rebuild_cache.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/list_install_components.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/install.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/install/local.dir
-/home/omar/Desktop/3dprototype_urdf/build/3dprototype_urdf/CMakeFiles/install/strip.dir

@@ -1,0 +1,35 @@
+# Per-lidar filter chains (laser_filters/scan_to_scan_filter_chain).
+# filter2 crops each scan to the outward-facing +/-125 deg, the same field of
+# view as the simulated sensors: the real RPLidar A1M8 sees 360 deg, and the
+# rear half of each scan would otherwise hit the robot's own body/lift.
+scan_filter_front:
+  ros__parameters:
+    filter1:
+      name: range_filter_front
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        use_message_range_limits: true
+        lower_threshold: 0.15
+        upper_threshold: 100.0
+    filter2:
+      name: fov_filter_front
+      type: laser_filters/LaserScanAngularBoundsFilter
+      params:
+        lower_angle: -2.18166
+        upper_angle: 2.18166
+
+scan_filter_rear:
+  ros__parameters:
+    filter1:
+      name: range_filter_rear
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        use_message_range_limits: true
+        lower_threshold: 0.15
+        upper_threshold: 100.0
+    filter2:
+      name: fov_filter_rear
+      type: laser_filters/LaserScanAngularBoundsFilter
+      params:
+        lower_angle: -2.18166
+        upper_angle: 2.18166

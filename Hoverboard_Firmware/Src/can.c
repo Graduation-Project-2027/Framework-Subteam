@@ -16,7 +16,7 @@
 */
 
 /*
- * bxCAN driver (register level, CMSIS only) and the AGV CAN protocol (see CAN SETTINGS in config.h).
+ * bxCAN driver (register level, CMSIS only) and the AMR CAN protocol (see CAN SETTINGS in config.h).
  * Implemented without the HAL CAN module on purpose: the bundled Drivers/ folder ships the legacy HAL CAN API,
  * while PlatformIO's framework-stm32cubef1 ships the new one. Register access works with both.
  */

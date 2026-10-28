@@ -343,7 +343,7 @@
 
 // ############################ VARIANT_CAN SETTINGS ############################
 #ifdef VARIANT_CAN
-/* CONTROL VIA CAN BUS - differential drive AGV (e.g. ROS 2 diff_drive_controller on a Raspberry Pi)
+/* CONTROL VIA CAN BUS - differential drive AMR (e.g. ROS 2 diff_drive_controller on a Raspberry Pi)
  * On-chip bxCAN, CAN 2.0A 11-bit identifiers. An external CAN transceiver is required (TJA1050, SN65HVD230, TCAN1051, ...).
  * Pin selection, bitrate, IDs and the frame layout: see the CAN SETTINGS section below. docs/hoverboard_can.dbc describes all frames.
  *

@@ -1,8 +1,0 @@
-source;share/3dprototype_urdf/hook/cmake_prefix_path.ps1
-source;share/3dprototype_urdf/hook/cmake_prefix_path.dsv
-source;share/3dprototype_urdf/hook/cmake_prefix_path.sh
-source;share/3dprototype_urdf/local_setup.bash
-source;share/3dprototype_urdf/local_setup.dsv
-source;share/3dprototype_urdf/local_setup.ps1
-source;share/3dprototype_urdf/local_setup.sh
-source;share/3dprototype_urdf/local_setup.zsh

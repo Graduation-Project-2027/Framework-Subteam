@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<robot name="amr" xmlns:xacro="http://www.ros.org/wiki/xacro" xmlns:gz="http://gazebosim.org/schema">
+
+    <xacro:property name="M_PI" value="3.1415926535897931" />
+
+    <xacro:arg name="robot_name" default="amr"/>
+    <xacro:arg name="prefix" default=""/>
+    <xacro:arg name="use_gazebo" default="false"/>
+
+    <xacro:include filename="$(find amr_description)/urdf/urdf/base.urdf.xacro"/>
+    <xacro:include filename="$(find amr_description)/urdf/urdf/drivetrain.urdf.xacro"/>
+    <xacro:include filename="$(find amr_description)/urdf/urdf/lidar.urdf.xacro"/>
+    <xacro:include filename="$(find amr_description)/urdf/urdf/imu.urdf.xacro"/>
+    <xacro:include filename="$(find amr_description)/urdf/urdf/materials.xacro"/>
+    <xacro:include filename="$(find amr_description)/urdf/urdf/lift.urdf.xacro"/>
+    <xacro:if value="$(arg use_gazebo)">
+      <xacro:include filename="$(find amr_description)/urdf/plugins/amr.gazebo"/>
+    </xacro:if>
+
+    <!-- base -->
+    <xacro:base prefix="$(arg prefix)"/>
+
+    <!-- lift -->
+    <xacro:lift_mechanism prefix="$(arg prefix)" parent_link="base_link" />
+
+    <!-- differential drive (centre axle) + 4 casters -->
+    <xacro:drivetrain prefix="$(arg prefix)"/>
+
+    <!-- front lidar -->
+    <xacro:lidar_sensor
+      prefix="$(arg prefix)"
+      parent="base_link"
+      frame_id="laser_frame"
+      xyz_offset="0.29 0 0.15"
+      rpy_offset="0 0 0"
+      mesh_xyz_offset="0 0 0"
+      mesh_rpy_offset="0 0 0"
+      min_range="0.12"
+      topic_name="scan"/>
+
+    <!-- mirrored rear lidar -->
+    <xacro:lidar_sensor
+      prefix="$(arg prefix)"
+      parent="base_link"
+      frame_id="laser_rear_frame"
+      xyz_offset="-0.29 0 0.15"
+      rpy_offset="0 0 ${pi}"
+      mesh_xyz_offset="0 0 0"
+      mesh_rpy_offset="0 0 0"
+      min_range="0.12"
+      topic_name="scan_rear"/>
+
+    <!-- imu -->
+    <xacro:imu_sensor
+      prefix="$(arg prefix)"
+      parent="base_link"
+      frame_id="imu"
+      xyz_offset="0 0 0.016"
+      rpy_offset="0 0 0"
+      update_rate="15.0"
+      topic_name="imu/data"/>
+
+    <xacro:if value="$(arg use_gazebo)">
+    <gazebo reference="$(arg prefix)base_link">
+      <mu1>0.000002</mu1>
+      <mu2>0.000002</mu2>
+    </gazebo>
+    </xacro:if>
+
+</robot>

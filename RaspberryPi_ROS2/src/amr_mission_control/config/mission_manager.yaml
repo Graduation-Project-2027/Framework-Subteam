@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Mission Manager Parameters
+# ═══════════════════════════════════════════════════════════════════════
+mission_manager:
+  ros__parameters:
+
+    # ── Robot footprint (polygon string, same format as Nav2 costmap) ──
+    footprint_robot: "[[0.35, 0.32], [0.35, -0.32], [-0.35, -0.32], [-0.35, 0.32]]"
+    # Robot + rack — MUST encompass the actual rack (0.95m) plus margin,
+    # otherwise Nav2 plans through gaps the physical rack can't fit through.
+    # 1.05m × 1.05m gives ~5cm safety margin around the rack.
+    footprint_carrying: "[[-0.525, -0.525], [-0.525, 0.525], [0.525, 0.525], [0.525, -0.525]]"
+
+    # ── Scan topics (used for rack-leg detection) ─────────────────────
+    scan_topics:
+      - "/scan_front_filtered"
+      - "/scan_rear_filtered"
+
+    # ── Rack geometry ─────────────────────────────────────────────────
+    # Side length of the rack (distance between adjacent legs)
+    rack_side_length: 0.95
+
+    # ── Rack-leg clustering (lidar) ───────────────────────────────────
+    # Max distance to merge nearby scan points into one leg cluster
+    leg_cluster_max_dist: 0.12
+
+    # ── Staging (Nav2 goal in the aisle before the closed-loop moves) ─
+    # The rack's yaw defines which side the aisle is on.
+    # Pickup: Nav2 must stop FULLY OUTSIDE the rack footprint (≥ rack_half
+    # 0.475 + robot_half 0.35 + margin) so it isn't repelled by the legs;
+    # the closed-loop dock_servo (not Nav2) does the precise drive under the
+    # rack from here.  0.55 m put the footprint between the legs → Nav2 "fears".
+    pickup_approach_distance: 1.35
+
+    # Carrying: bigger footprint (1.05 m) needs more clearance so it
+    # ends up fully outside neighbouring rack legs' inflation zones
+    # after extraction (otherwise Nav2 can't plan from there).
+    carrying_approach_distance: 1.20
+
+    # ── Inflation radius profiles ─────────────────────────────────────
+    # Three modes, switched dynamically during a transport:
+    #   - normal: default for general (idle / navigate-only) use
+    #   - pickup: medium — used for empty-footprint approach, pulls path
+    #             to the centerline of rack rows so legs aren't clipped
+    #   - carrying: low — needed so the larger carrying footprint can
+    #               still find paths through the warehouse
+    inflation_radius_normal: 0.55
+    # Low on approach: dock_servo does the precise under-rack drive, so Nav2
+    # must NOT be repelled by the rack legs its own lidar sees.
+    inflation_radius_pickup: 0.25
+    inflation_radius_carrying: 0.25
+
+    # ── Transport task timing ─────────────────────────────────────────
+    lift_height: 0.05         # lift target — matches URDF lift_range (new 5 cm stroke)
+    lift_wait_time: 6.0       # seconds to wait after sending lift command
+    costmap_settle_time: 1.0  # seconds to wait after carrying mode switch
+    drop_wait_time: 5.0       # let the rack fully settle before reversing out
+
+    # ── Speed ─────────────────────────────────────────────────────────
+    default_speed: 0.4        # default max speed multiplier (m/s)
+    teleop_linear_scale: 0.4  # base linear speed for teleop buttons
+    teleop_angular_scale: 0.8 # base angular speed for teleop buttons
+
+    # ── Navigation ────────────────────────────────────────────────────
+    nav_goal_timeout: 10.0    # seconds to wait for Nav2 goal acceptance
+    nav_poll_rate: 0.05       # seconds between polling for nav result
+
+    # ── Lanes ─────────────────────────────────────────────────────────
+    # Lane routes (bends and junctions between lanes) are rounded with this
+    # radius and followed in one FollowPath goal instead of stopping at every
+    # lane point. false = old behaviour (one Nav2 goal per point).
+    lane_smooth_follow: true
+    lane_corner_radius: 0.6   # m; capped at half of the shorter neighbouring segment
+    lane_path_step: 0.05      # m between path poses
+    lane_follow_timeout: 120.0 # s for one lane curve
+
+    # ── Closed-loop docking (leg-servo) ───────────────────────────────
+    # dock_servo drives the robot from the pickup staging point precisely
+    # under the rack, servoing on the detected legs (x, y AND yaw).
+    robot_half_length: 0.35
+    robot_half_width: 0.32
+    # Diff-drive line follower along the rack axis:
+    dock_gain_x: 0.9          # forward speed per metre still to go
+    dock_gain_y: 1.1          # heading correction [rad] per metre of lateral offset
+    dock_gain_yaw: 1.4        # turn rate per radian of heading error
+    dock_vx_max: 0.28         # entry momentum to carry through the legs
+    dock_wz_max: 0.6
+    dock_pos_tolerance: 0.03  # along the rack axis
+    dock_lateral_tolerance: 0.04
+    dock_yaw_tolerance: 0.05
+    dock_converge_count: 4
+    dock_retry_backoff: 0.8   # back out this far to re-approach if still off-centre
+    dock_max_retries: 2
+    line_blend_distance: 0.15 # last stretch: only square up the heading
+    dock_gate_y: 0.20         # forward motion fades past this lateral error
+    dock_gate_yaw: 0.30
+    dock_vx_floor: 0.30       # min forward fraction (never stall while aligning)
+    dock_rate_hz: 15.0
+    dock_timeout: 90.0
+    dock_lost_timeout: 2.5    # s of lost legs before map-coordinate fallback
+    dock_leg_match_gate: 0.30 # cluster→predicted-leg match radius
+    dock_search_window: 0.95  # ignore clusters beyond this from rack centre
+
+    # ── Stiction breakaway ────────────────────────────────────────────
+    # If commanding motion but dragging below stall_ratio of it for
+    # stall_time, punch the command to breakaway_velocity to break free.
+    stall_speed_eps: 0.03
+    stall_ratio: 0.4
+    stall_time: 0.35
+    breakaway_velocity: 0.55
+
+    # ── Closed-loop straight / point drives (extract / insert / retreat) ─
+    drive_gain: 1.4
+    drive_vmax: 0.25
+    drive_vmin: 0.04
+    drive_pos_tolerance: 0.02
+    drive_yaw_tolerance: 0.03
+    drive_yaw_hold_gain: 1.2      # turn rate per radian of heading error
+    drive_lateral_hold_gain: 1.2  # heading correction [rad] per metre off the line
+    drive_rate_hz: 20.0
+    drive_timeout: 45.0
+    extract_clearance: 1.15   # straight reverse to pull rack into the aisle
+    retreat_clearance: 1.15

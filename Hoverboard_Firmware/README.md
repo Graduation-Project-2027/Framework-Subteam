@@ -107,7 +107,7 @@ To explore the controller without a Matlab/Simulink installation click on the li
 
 - **VARIANT_ADC**: The motors are controlled by two potentiometers connected to the Left sensor cable (long wired)
 - **VARIANT_USART**: The motors are controlled via serial protocol (e.g. on USART3 right sensor cable, the short wired cable). The commands can be sent from an Arduino. Check out the [hoverserial.ino](/Arduino/hoverserial) as an example sketch.
-- **VARIANT_CAN**: Differential drive AGV over CAN bus (on-chip bxCAN + external CAN transceiver, e.g. TJA1050, on PB8/PB9 or PA11/PA12). Both motors in speed mode with per-wheel rpm commands, hall-sensor odometry ticks, wheel speeds, motor currents, battery, temperature, status/heartbeat and an e-stop frame. Settings and frame layout: CAN SETTINGS section of [config.h](/Inc/config.h); machine-readable description for the host: [docs/hoverboard_can.dbc](/docs/hoverboard_can.dbc).
+- **VARIANT_CAN**: Differential drive AMR over CAN bus (on-chip bxCAN + external CAN transceiver, e.g. TJA1050, on PB8/PB9 or PA11/PA12). Both motors in speed mode with per-wheel rpm commands, hall-sensor odometry ticks, wheel speeds, motor currents, battery, temperature, status/heartbeat and an e-stop frame. Settings and frame layout: CAN SETTINGS section of [config.h](/Inc/config.h); machine-readable description for the host: [docs/hoverboard_can.dbc](/docs/hoverboard_can.dbc).
 - **VARIANT_NUNCHUK**: Wii Nunchuk offers one hand control for throttle, braking and steering. This was one of the first input device used for electric armchairs or bottle crates.
 - **VARIANT_PPM**: RC remote control with PPM Sum signal.
 - **VARIANT_PWM**: RC remote control with PWM signal.

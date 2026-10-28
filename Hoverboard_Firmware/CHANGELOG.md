@@ -1,13 +1,13 @@
 # Changelog
 
-All changes made to this firmware (based on [hoverboard-firmware-hack-FOC](https://github.com/EFeru/hoverboard-firmware-hack-FOC)) for the Graduation Project 2027 AGV.
+All changes made to this firmware (based on [hoverboard-firmware-hack-FOC](https://github.com/EFeru/hoverboard-firmware-hack-FOC)) for the Graduation Project 2027 AMR.
 
 ---
 
-## 2026-10-28 — AGV CAN protocol, configuration GUI
+## 2026-10-28 — AMR CAN protocol, configuration GUI
 
 ### Added
-- **AGV CAN protocol in `VARIANT_CAN`** ([Src/can.c](Src/can.c), [Inc/can.h](Inc/can.h))
+- **AMR CAN protocol in `VARIANT_CAN`** ([Src/can.c](Src/can.c), [Inc/can.h](Inc/can.h))
   - Per-wheel speed commands in **rpm** (`0x200 + node`), converted to the FOC speed target using `N_MOT_MAX`.
   - **E-stop broadcast** frame `0x010` (1 = stop, latched; 0 = release): active braking to 0 rpm, rate limiter and filter bypassed.
   - **Odometry frame** `0x180 + node` at 50 Hz: signed, wrapping int32 hall-step counters per wheel (6 per electrical revolution, ~90 per wheel revolution).
@@ -56,7 +56,7 @@ All changes made to this firmware (based on [hoverboard-firmware-hack-FOC](https
 - [Src/setup.c](Src/setup.c): the unused charger-detect pin is not configured when CAN uses PA11/PA12.
 
 ### Superseded
-- The first feedback layout (`0x181` speeds/battery/temperature, `0x281` commands/current/status at 500 kbit/s) was replaced on 2026-10-28 by the AGV protocol above.
+- The first feedback layout (`0x181` speeds/battery/temperature, `0x281` commands/current/status at 500 kbit/s) was replaced on 2026-10-28 by the AMR protocol above.
 
 ---
 

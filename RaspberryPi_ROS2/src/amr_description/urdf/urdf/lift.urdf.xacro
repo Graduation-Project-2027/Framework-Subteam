@@ -1,0 +1,449 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ========================================================================
+       NEW lift mechanism (SolidWorks scissor / lead-screw lift export, meshes in
+       meshes/lift_v2).  The full CAD assembly is grafted onto the robot.
+         * base_link  -> lift_base_link, FIXED-mounted on the robot at z=0.165
+         * lead screws, nuts and the 8 scissor bars are reproduced from the CAD
+           and FROZEN (fixed joints) as faithful decoration
+         * table_link -> lift_link, the ONE actuated DOF, driven up/down by the
+           existing JointPositionController on /lift_joint/cmd_pos
+       Only the table carries collision (a clean box) so the lifting contact
+       with the rack is stable.  Physical stroke = 5 cm (the real bench rig).
+
+       Geometry in WORLD frame (robot base_link sits ~0.036 m above ground,
+       table top world Z = base_link_z + mount_z + 0.1553).
+         stowed table top                         is 0.320 m
+         shelf_1 underside                        is 0.350 m  (rack/model.sdf)
+         -> drive-under clearance                 is 0.030 m
+         raised table top = 0.320 + 0.05          is 0.370 m
+         -> rack lifted off floor                 is 0.020 m
+       Only the table has collision, so the frozen scissor bars (visually ~0.33)
+       never block driving under.
+       ===================================================================== -->
+
+  <xacro:property name="lift_range"   value="0.05" />    <!-- 5 cm stroke -->
+  <xacro:property name="lift_mount_z" value="0.165" />   <!-- base mount height -->
+
+  <xacro:macro name="lift_mechanism" params="prefix parent_link">
+
+    <!-- Fixed mount: lift base onto the robot chassis.  Yaw = 90 deg so the
+         lift's long axis runs along the robot (front-back) instead of across
+         it.  Flip to -1.5708 if it ends up facing the wrong way. -->
+    <joint name="${prefix}lift_mount_joint" type="fixed">
+      <origin xyz="0 0 ${lift_mount_z}" rpy="0 0 1.5708"/>
+      <parent link="${prefix}${parent_link}"/>
+      <child link="${prefix}lift_base_link"/>
+    </joint>
+
+    <link name="${prefix}lift_base_link">
+      <inertial>
+        <origin xyz="-3.40389888021849E-16 0.0162456940272311 -2.39641703952862E-16" rpy="0 0 0"/>
+        <mass value="1.68121625180425"/>
+        <inertia ixx="0.0272950436547983" ixy="-2.92223113526388E-20" ixz="-1.84544191038011E-11" iyy="0.0343155917992195" iyz="-1.05679271570795E-18" izz="0.00716778008863357"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/base_link.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}lead_screw_left">
+      <inertial>
+        <origin xyz="-1.34057314777475E-05 -6.77644773028273E-06 0.0294401866597978" rpy="0 0 0"/>
+        <mass value="0.0379707312460712"/>
+        <inertia ixx="3.37228023983108E-05" ixy="-1.3889874635159E-09" ixz="1.15131781987586E-09" iyy="3.37251058671091E-05" iyz="-1.45877067588279E-10" izz="4.86890781190937E-07"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/lead_screw_left.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}nut_left">
+      <inertial>
+        <origin xyz="0.00687314050972793 1.96121777595063E-08 -0.0181466873810528" rpy="0 0 0"/>
+        <mass value="0.140907892389316"/>
+        <inertia ixx="0.00011787445699265" ixy="9.41333437036286E-12" ixz="3.90054331323103E-06" iyy="2.82481439477633E-05" iyz="-2.31817021112486E-11" izz="0.000112986783640138"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/nut_left.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}center_front_left_y_link">
+    </link>
+    <link name="${prefix}center_front_left_link">
+    </link>
+    <link name="${prefix}center_front_left_bar2_link">
+    </link>
+    <link name="${prefix}center_back_left_y_link">
+    </link>
+    <link name="${prefix}center_back_left_link">
+    </link>
+    <link name="${prefix}center_back_left_bar2_link">
+    </link>
+    <link name="${prefix}center_front_right_y_link">
+    </link>
+    <link name="${prefix}center_front_right_link">
+    </link>
+    <link name="${prefix}center_front_right_bar2_link">
+    </link>
+    <link name="${prefix}center_back_right_y_link">
+    </link>
+    <link name="${prefix}center_back_right_link">
+    </link>
+    <link name="${prefix}center_back_right_bar2_link">
+    </link>
+    <link name="${prefix}bar1_front_left">
+      <inertial>
+        <origin xyz="0.0339784017036739 -0.0310075509781577 0.00249999999999832" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.07750472693072E-06" ixy="5.01950408025561E-06" ixz="1.81142454407637E-21" iyy="5.73960989932836E-06" iyz="-2.15372225713115E-21" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar1_front_left.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar1_front_left_pivot">
+    </link>
+    <link name="${prefix}bar2_front_left">
+      <inertial>
+        <origin xyz="0.0339784017037323 0.0310075509782255 0.00250000000000257" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.0775047269301E-06" ixy="-5.01950408025557E-06" ixz="-4.03983328207751E-21" iyy="5.73960989932899E-06" iyz="-3.9463507309067E-21" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar2_front_left.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar2_front_left_pivot">
+    </link>
+    <link name="${prefix}bar1_back_left">
+      <inertial>
+        <origin xyz="0.0339784017036705 0.031007550978158 0.00249999999999828" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.07750472693075E-06" ixy="-5.01950408025561E-06" ixz="5.37170297248244E-22" iyy="5.73960989932835E-06" iyz="6.52703100217084E-22" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar1_back_left.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar1_back_left_pivot">
+    </link>
+    <link name="${prefix}bar2_back_left">
+      <inertial>
+        <origin xyz="0.0339784017036686 -0.0310075509781337 0.00750000000000017" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.07750472693083E-06" ixy="-5.01950408025562E-06" ixz="1.79424580795874E-20" iyy="5.73960989932826E-06" iyz="1.8445717642294E-20" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar2_back_left.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar2_back_left_pivot">
+    </link>
+    <link name="${prefix}lead_screw_right">
+      <inertial>
+        <origin xyz="-8.38384201601736E-06 1.24638268456587E-05 0.0294401868655245" rpy="0 0 0"/>
+        <mass value="0.0379707308333357"/>
+        <inertia ixx="3.37247292269576E-05" ixy="1.62934721088606E-09" ixz="-2.16795035695576E-12" iyy="3.37231787880296E-05" iyz="-1.16053781683565E-09" izz="4.86890758262234E-07"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/lead_screw_right.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}nut_right">
+      <inertial>
+        <origin xyz="-3.36005681736585E-15 0.00604801520217706 0.030622553676596" rpy="0 0 0"/>
+        <mass value="0.160132140662421"/>
+        <inertia ixx="6.10007415528193E-05" ixy="-4.29551257693597E-15" ixz="1.70295720214787E-20" iyy="0.000150619716774013" iyz="3.90053563340027E-06" izz="0.000112479317861735"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/nut_right.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar1_front_right">
+      <inertial>
+        <origin xyz="0.0339784017036908 0.0310075509781517 0.00249999999999984" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.07750472693072E-06" ixy="-5.01950408025561E-06" ixz="1.7089799883492E-21" iyy="5.73960989932837E-06" iyz="2.1046159842614E-21" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar1_front_right.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar1_front_right_pivot">
+    </link>
+    <link name="${prefix}bar2_front_right">
+      <inertial>
+        <origin xyz="0.0339784017036935 -0.0310075509781497 0.00250000000000021" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.0775047269301E-06" ixy="5.01950408025556E-06" ixz="-3.42222599771135E-21" iyy="5.73960989932898E-06" iyz="3.44933124273791E-21" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar2_front_right.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar2_front_right_pivot">
+    </link>
+    <link name="${prefix}bar1_back_right">
+      <inertial>
+        <origin xyz="0.0339784017036878 -0.0310075509781518 0.00249999999999986" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.07750472693073E-06" ixy="5.01950408025562E-06" ixz="4.09849221752053E-22" iyy="5.73960989932837E-06" iyz="-8.43277392565816E-22" izz="1.07733604168284E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar1_back_right.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar1_back_right_pivot">
+    </link>
+    <link name="${prefix}bar2_back_right">
+      <inertial>
+        <origin xyz="0.033978401703696 0.0310075509781494 0.00249999999999974" rpy="0 0 0"/>
+        <mass value="0.0105010102633798"/>
+        <inertia ixx="5.07750472693009E-06" ixy="-5.01950408025556E-06" ixz="-2.03690201844286E-21" iyy="5.73960989932898E-06" iyz="-2.01367005459732E-21" izz="1.07733604168283E-05"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/bar2_back_right.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+    </link>
+    <link name="${prefix}bar2_back_right_pivot">
+    </link>
+    <link name="${prefix}lift_link">
+      <inertial>
+        <origin xyz="-9.37010239009259E-17 6.17838764671444E-16 0.00578440190069766" rpy="0 0 0"/>
+        <mass value="0.395241194912214"/>
+        <inertia ixx="0.00859776795504631" ixy="2.81406844390508E-18" ixz="1.83372734384748E-18" iyy="0.00182878805013723" iyz="9.07083694915163E-18" izz="0.0103772362248568"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="file://$(find amr_description)/meshes/lift_v2/table_link.STL"/></geometry>
+        <material name="lift_silver"><color rgba="0.79 0.82 0.93 1"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0.014" rpy="0 0 0"/>
+        <geometry><box size="0.20 0.467 0.028"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}joint_lead_screw_left" type="fixed">
+      <origin xyz="0 0.1618 0.036" rpy="1.5708 -1.5708 0"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}lead_screw_left"/>
+    </joint>
+    <joint name="${prefix}joint_nut_left" type="fixed">
+      <origin xyz="0 0.121485 0.036" rpy="1.5708 -1.5708 0"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}nut_left"/>
+    </joint>
+    <joint name="${prefix}joint_center_front_left_y" type="fixed">
+      <origin xyz="-0.0795 0.17673249 0.07145525" rpy="0 0 0"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}center_front_left_y_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_front_left_z" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_left_y_link"/>
+      <child link="${prefix}center_front_left_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_front_left_bar2" type="fixed">
+      <origin xyz="-0.005 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_left_link"/>
+      <child link="${prefix}center_front_left_bar2_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_back_left_y" type="fixed">
+      <origin xyz="0.0795 0.17673249 0.07145525" rpy="0 0 0"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}center_back_left_y_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_back_left_z" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_left_y_link"/>
+      <child link="${prefix}center_back_left_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_back_left_bar2" type="fixed">
+      <origin xyz="0.005 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_left_link"/>
+      <child link="${prefix}center_back_left_bar2_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_front_right_y" type="fixed">
+      <origin xyz="-0.0795 -0.17673249 0.07145525" rpy="0 0 0"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}center_front_right_y_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_front_right_z" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_right_y_link"/>
+      <child link="${prefix}center_front_right_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_front_right_bar2" type="fixed">
+      <origin xyz="-0.005 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_right_link"/>
+      <child link="${prefix}center_front_right_bar2_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_back_right_y" type="fixed">
+      <origin xyz="0.0795 -0.17673249 0.07145525" rpy="0 0 0"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}center_back_right_y_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_back_right_bar2" type="fixed">
+      <origin xyz="0.005001 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_right_link"/>
+      <child link="${prefix}center_back_right_bar2_link"/>
+    </joint>
+    <joint name="${prefix}joint_center_back_right_z" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_right_y_link"/>
+      <child link="${prefix}center_back_right_link"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_front_left" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_left_link"/>
+      <child link="${prefix}bar1_front_left_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_front_left_mesh" type="fixed">
+      <origin xyz="0.0025 -0.01705 -0.042724" rpy="-1.570796 -0.811374 1.570796"/>
+      <parent link="${prefix}bar1_front_left_pivot"/>
+      <child link="${prefix}bar1_front_left"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_front_left" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_left_bar2_link"/>
+      <child link="${prefix}bar2_front_left_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_front_left_mesh" type="fixed">
+      <origin xyz="0.0025 0.01705 -0.042724" rpy="1.570796 -0.811374 -1.570796"/>
+      <parent link="${prefix}bar2_front_left_pivot"/>
+      <child link="${prefix}bar2_front_left"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_back_left" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_left_link"/>
+      <child link="${prefix}bar1_back_left_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_back_left_mesh" type="fixed">
+      <origin xyz="-0.0025 -0.01705 -0.042724" rpy="1.570796 -0.811374 1.570796"/>
+      <parent link="${prefix}bar1_back_left_pivot"/>
+      <child link="${prefix}bar1_back_left"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_back_left" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_left_bar2_link"/>
+      <child link="${prefix}bar2_back_left_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_back_left_mesh" type="fixed">
+      <origin xyz="0.0025 0.041781 -0.019246" rpy="1.570796 -0.811374 -1.570796"/>
+      <parent link="${prefix}bar2_back_left_pivot"/>
+      <child link="${prefix}bar2_back_left"/>
+    </joint>
+    <joint name="${prefix}joint_lead_screw_right" type="fixed">
+      <origin xyz="0 -0.1618 0.036" rpy="1.5708 0 3.1416"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}lead_screw_right"/>
+    </joint>
+    <joint name="${prefix}joint_nut_right" type="fixed">
+      <origin xyz="0 -0.117585 0.036" rpy="1.5708 0 3.1416"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}nut_right"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_front_right" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_right_link"/>
+      <child link="${prefix}bar1_front_right_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_front_right_mesh" type="fixed">
+      <origin xyz="0.0025 0.01705 -0.042724" rpy="1.570796 -0.811374 -1.570796"/>
+      <parent link="${prefix}bar1_front_right_pivot"/>
+      <child link="${prefix}bar1_front_right"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_front_right" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_front_right_bar2_link"/>
+      <child link="${prefix}bar2_front_right_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_front_right_mesh" type="fixed">
+      <origin xyz="0.0025 -0.01705 -0.042724" rpy="-1.570796 -0.811374 1.570796"/>
+      <parent link="${prefix}bar2_front_right_pivot"/>
+      <child link="${prefix}bar2_front_right"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_back_right" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_right_link"/>
+      <child link="${prefix}bar1_back_right_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar1_back_right_mesh" type="fixed">
+      <origin xyz="-0.0025 0.01705 -0.042724" rpy="-1.570796 -0.811374 -1.570796"/>
+      <parent link="${prefix}bar1_back_right_pivot"/>
+      <child link="${prefix}bar1_back_right"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_back_right" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}center_back_right_bar2_link"/>
+      <child link="${prefix}bar2_back_right_pivot"/>
+    </joint>
+    <joint name="${prefix}joint_bar2_back_right_mesh" type="fixed">
+      <origin xyz="-0.0025 -0.01705 -0.042724" rpy="1.570796 -0.811374 1.570796"/>
+      <parent link="${prefix}bar2_back_right_pivot"/>
+      <child link="${prefix}bar2_back_right"/>
+    </joint>
+
+    <!-- The ONE actuated joint: raises the table (lift_link).  Origin/axis
+         copied from the CAD's joint_table_link so the platform sits correctly;
+         positive command = up. -->
+    <joint name="${prefix}lift_joint" type="prismatic">
+      <origin xyz="0 0 0.11956" rpy="3.1416 0 3.1416"/>
+      <parent link="${prefix}lift_base_link"/>
+      <child link="${prefix}lift_link"/>
+      <axis xyz="0 0 -1"/>
+      <limit lower="0" upper="${lift_range}" effort="200" velocity="0.20"/>
+      <dynamics damping="15.0" friction="2.0"/>
+    </joint>
+
+    <transmission name="${prefix}lift_trans">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="${prefix}lift_joint">
+        <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="${prefix}lift_motor">
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
+    <!-- High friction on the table so the carried rack doesn't slip -->
+    <gazebo reference="${prefix}lift_link">
+      <material>Gazebo/Grey</material>
+      <collision>
+        <surface>
+          <friction><ode><mu>10.0</mu><mu2>10.0</mu2></ode></friction>
+        </surface>
+      </collision>
+    </gazebo>
+    <gazebo reference="${prefix}lift_base_link">
+      <material>Gazebo/DarkGrey</material>
+    </gazebo>
+
+  </xacro:macro>
+</robot>
