@@ -1,0 +1,14 @@
+!build/hover.hex
+.pio/
+.pioenvs/
+.vscode/
+MDK-ARM/DebugConfig/
+MDK-ARM/Listing/
+MDK-ARM/Objects/
+MDK-ARM/RTE/
+MDK-ARM/*.uvguix.*
+build/
+
+.fake
+Inc/config.h.bak
+tools/__pycache__/

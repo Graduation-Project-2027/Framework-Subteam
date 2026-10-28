@@ -1,0 +1,1117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="3dprototype_urdf">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-3.40389888021849E-16 0.0162456940272311 -2.39641703952862E-16"
+        rpy="0 0 0" />
+      <mass
+        value="1.68121625180425" />
+      <inertia
+        ixx="0.0272950436547983"
+        ixy="-2.92223113526388E-20"
+        ixz="-1.84544191038011E-11"
+        iyy="0.0343155917992195"
+        iyz="-1.05679271570795E-18"
+        izz="0.00716778008863357" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="lead_screw_left">
+    <inertial>
+      <origin
+        xyz="-1.34057314777475E-05 -6.77644773028273E-06 0.0294401866597978"
+        rpy="0 0 0" />
+      <mass
+        value="0.0379707312460712" />
+      <inertia
+        ixx="3.37228023983108E-05"
+        ixy="-1.3889874635159E-09"
+        ixz="1.15131781987586E-09"
+        iyy="3.37251058671091E-05"
+        iyz="-1.45877067588279E-10"
+        izz="4.86890781190937E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/lead_screw_left.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.776470588235294 0.756862745098039 0.737254901960784 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/lead_screw_left.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_lead_screw_left"
+    type="revolute">
+    <origin
+      xyz="0 0.1618 0.036"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="lead_screw_left" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-18.6736267329"
+      upper="26.1506172485"
+      effort="2"
+      velocity="100" />
+  </joint>
+  <link
+    name="nut_left">
+    <inertial>
+      <origin
+        xyz="0.00687314050972793 1.96121777595063E-08 -0.0181466873810528"
+        rpy="0 0 0" />
+      <mass
+        value="0.140907892389316" />
+      <inertia
+        ixx="0.00011787445699265"
+        ixy="9.41333437036286E-12"
+        ixz="3.90054331323103E-06"
+        iyy="2.82481439477633E-05"
+        iyz="-2.31817021112486E-11"
+        izz="0.000112986783640138" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/nut_left.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.827450980392157 0.666666666666667 0.129411764705882 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/nut_left.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_nut_left"
+    type="prismatic">
+    <origin
+      xyz="0 0.121485 0.036"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="nut_left" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <link
+    name="center_front_left_y_link" />
+  <link
+    name="center_front_left_link" />
+  <link
+    name="center_front_left_bar2_link" />
+  <joint
+    name="joint_center_front_left_y"
+    type="prismatic">
+    <origin
+      xyz="-0.0795 0.17673249 0.07145525"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="center_front_left_y_link" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_front_left_z"
+    type="prismatic">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_left_y_link" />
+    <child
+      link="center_front_left_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_front_left_bar2"
+    type="fixed">
+    <origin
+      xyz="-0.005 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_left_link" />
+    <child
+      link="center_front_left_bar2_link" />
+  </joint>
+  <link
+    name="center_back_left_y_link" />
+  <link
+    name="center_back_left_link" />
+  <link
+    name="center_back_left_bar2_link" />
+  <joint
+    name="joint_center_back_left_y"
+    type="prismatic">
+    <origin
+      xyz="0.0795 0.17673249 0.07145525"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="center_back_left_y_link" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_back_left_z"
+    type="prismatic">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_left_y_link" />
+    <child
+      link="center_back_left_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_back_left_bar2"
+    type="fixed">
+    <origin
+      xyz="0.005 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_left_link" />
+    <child
+      link="center_back_left_bar2_link" />
+  </joint>
+  <link
+    name="center_front_right_y_link" />
+  <link
+    name="center_front_right_link" />
+  <link
+    name="center_front_right_bar2_link" />
+  <joint
+    name="joint_center_front_right_y"
+    type="prismatic">
+    <origin
+      xyz="-0.0795 -0.17673249 0.07145525"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="center_front_right_y_link" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_front_right_z"
+    type="prismatic">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_right_y_link" />
+    <child
+      link="center_front_right_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_front_right_bar2"
+    type="fixed">
+    <origin
+      xyz="-0.005 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_right_link" />
+    <child
+      link="center_front_right_bar2_link" />
+  </joint>
+  <link
+    name="center_back_right_y_link" />
+  <link
+    name="center_back_right_link" />
+  <link
+    name="center_back_right_bar2_link" />
+  <joint
+    name="joint_center_back_right_y"
+    type="prismatic">
+    <origin
+      xyz="0.0795 -0.17673249 0.07145525"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="center_back_right_y_link" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <joint
+    name="joint_center_back_right_bar2"
+    type="fixed">
+    <origin
+      xyz="0.005001 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_right_link" />
+    <child
+      link="center_back_right_bar2_link" />
+  </joint>
+  <joint
+    name="joint_center_back_right_z"
+    type="prismatic">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_right_y_link" />
+    <child
+      link="center_back_right_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <link
+    name="bar1_front_left">
+    <inertial>
+      <origin
+        xyz="0.0339784017036739 -0.0310075509781577 0.00249999999999832"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.07750472693072E-06"
+        ixy="5.01950408025561E-06"
+        ixz="1.81142454407637E-21"
+        iyy="5.73960989932836E-06"
+        iyz="-2.15372225713115E-21"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_front_left.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_front_left.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar1_front_left_pivot" />
+  <joint
+    name="joint_bar1_front_left"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_left_link" />
+    <child
+      link="bar1_front_left_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar1_front_left_mesh"
+    type="fixed">
+    <origin
+      xyz="0.0025 -0.01705 -0.042724"
+      rpy="-1.570796 -0.811374 1.570796" />
+    <parent
+      link="bar1_front_left_pivot" />
+    <child
+      link="bar1_front_left" />
+  </joint>
+  <link
+    name="bar2_front_left">
+    <inertial>
+      <origin
+        xyz="0.0339784017037323 0.0310075509782255 0.00250000000000257"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.0775047269301E-06"
+        ixy="-5.01950408025557E-06"
+        ixz="-4.03983328207751E-21"
+        iyy="5.73960989932899E-06"
+        iyz="-3.9463507309067E-21"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_front_left.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_front_left.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar2_front_left_pivot" />
+  <joint
+    name="joint_bar2_front_left"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_left_bar2_link" />
+    <child
+      link="bar2_front_left_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar2_front_left_mesh"
+    type="fixed">
+    <origin
+      xyz="0.0025 0.01705 -0.042724"
+      rpy="1.570796 -0.811374 -1.570796" />
+    <parent
+      link="bar2_front_left_pivot" />
+    <child
+      link="bar2_front_left" />
+  </joint>
+  <link
+    name="bar1_back_left">
+    <inertial>
+      <origin
+        xyz="0.0339784017036705 0.031007550978158 0.00249999999999828"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.07750472693075E-06"
+        ixy="-5.01950408025561E-06"
+        ixz="5.37170297248244E-22"
+        iyy="5.73960989932835E-06"
+        iyz="6.52703100217084E-22"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_back_left.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_back_left.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar1_back_left_pivot" />
+  <joint
+    name="joint_bar1_back_left"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_left_link" />
+    <child
+      link="bar1_back_left_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar1_back_left_mesh"
+    type="fixed">
+    <origin
+      xyz="-0.0025 -0.01705 -0.042724"
+      rpy="1.570796 -0.811374 1.570796" />
+    <parent
+      link="bar1_back_left_pivot" />
+    <child
+      link="bar1_back_left" />
+  </joint>
+  <link
+    name="bar2_back_left">
+    <inertial>
+      <origin
+        xyz="0.0339784017036686 -0.0310075509781337 0.00750000000000017"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.07750472693083E-06"
+        ixy="-5.01950408025562E-06"
+        ixz="1.79424580795874E-20"
+        iyy="5.73960989932826E-06"
+        iyz="1.8445717642294E-20"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_back_left.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_back_left.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar2_back_left_pivot" />
+  <joint
+    name="joint_bar2_back_left"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_left_bar2_link" />
+    <child
+      link="bar2_back_left_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar2_back_left_mesh"
+    type="fixed">
+    <origin
+      xyz="0.0025 0.041781 -0.019246"
+      rpy="1.570796 -0.811374 -1.570796" />
+    <parent
+      link="bar2_back_left_pivot" />
+    <child
+      link="bar2_back_left" />
+  </joint>
+  <link
+    name="lead_screw_right">
+    <inertial>
+      <origin
+        xyz="-8.38384201601736E-06 1.24638268456587E-05 0.0294401868655245"
+        rpy="0 0 0" />
+      <mass
+        value="0.0379707308333357" />
+      <inertia
+        ixx="3.37247292269576E-05"
+        ixy="1.62934721088606E-09"
+        ixz="-2.16795035695576E-12"
+        iyy="3.37231787880296E-05"
+        iyz="-1.16053781683565E-09"
+        izz="4.86890758262234E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/lead_screw_right.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.996078431372549 0.996078431372549 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/lead_screw_right.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_lead_screw_right"
+    type="revolute">
+    <origin
+      xyz="0 -0.1618 0.036"
+      rpy="1.5708 0 3.1416" />
+    <parent
+      link="base_link" />
+    <child
+      link="lead_screw_right" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-18.6736267329"
+      upper="26.1506172485"
+      effort="2"
+      velocity="100" />
+  </joint>
+  <link
+    name="nut_right">
+    <inertial>
+      <origin
+        xyz="-3.36005681736585E-15 0.00604801520217706 0.030622553676596"
+        rpy="0 0 0" />
+      <mass
+        value="0.160132140662421" />
+      <inertia
+        ixx="6.10007415528193E-05"
+        ixy="-4.29551257693597E-15"
+        ixz="1.70295720214787E-20"
+        iyy="0.000150619716774013"
+        iyz="3.90053563340027E-06"
+        izz="0.000112479317861735" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/nut_right.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/nut_right.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_nut_right"
+    type="prismatic">
+    <origin
+      xyz="0 -0.117585 0.036"
+      rpy="1.5708 0 3.1416" />
+    <parent
+      link="base_link" />
+    <child
+      link="nut_right" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="50"
+      velocity="0.2" />
+  </joint>
+  <link
+    name="bar1_front_right">
+    <inertial>
+      <origin
+        xyz="0.0339784017036908 0.0310075509781517 0.00249999999999984"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.07750472693072E-06"
+        ixy="-5.01950408025561E-06"
+        ixz="1.7089799883492E-21"
+        iyy="5.73960989932837E-06"
+        iyz="2.1046159842614E-21"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_front_right.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_front_right.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar1_front_right_pivot" />
+  <joint
+    name="joint_bar1_front_right"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_right_link" />
+    <child
+      link="bar1_front_right_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar1_front_right_mesh"
+    type="fixed">
+    <origin
+      xyz="0.0025 0.01705 -0.042724"
+      rpy="1.570796 -0.811374 -1.570796" />
+    <parent
+      link="bar1_front_right_pivot" />
+    <child
+      link="bar1_front_right" />
+  </joint>
+  <link
+    name="bar2_front_right">
+    <inertial>
+      <origin
+        xyz="0.0339784017036935 -0.0310075509781497 0.00250000000000021"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.0775047269301E-06"
+        ixy="5.01950408025556E-06"
+        ixz="-3.42222599771135E-21"
+        iyy="5.73960989932898E-06"
+        iyz="3.44933124273791E-21"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_front_right.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_front_right.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar2_front_right_pivot" />
+  <joint
+    name="joint_bar2_front_right"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_front_right_bar2_link" />
+    <child
+      link="bar2_front_right_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar2_front_right_mesh"
+    type="fixed">
+    <origin
+      xyz="0.0025 -0.01705 -0.042724"
+      rpy="-1.570796 -0.811374 1.570796" />
+    <parent
+      link="bar2_front_right_pivot" />
+    <child
+      link="bar2_front_right" />
+  </joint>
+  <link
+    name="bar1_back_right">
+    <inertial>
+      <origin
+        xyz="0.0339784017036878 -0.0310075509781518 0.00249999999999986"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.07750472693073E-06"
+        ixy="5.01950408025562E-06"
+        ixz="4.09849221752053E-22"
+        iyy="5.73960989932837E-06"
+        iyz="-8.43277392565816E-22"
+        izz="1.07733604168284E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_back_right.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar1_back_right.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar1_back_right_pivot" />
+  <joint
+    name="joint_bar1_back_right"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_right_link" />
+    <child
+      link="bar1_back_right_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar1_back_right_mesh"
+    type="fixed">
+    <origin
+      xyz="-0.0025 0.01705 -0.042724"
+      rpy="-1.570796 -0.811374 -1.570796" />
+    <parent
+      link="bar1_back_right_pivot" />
+    <child
+      link="bar1_back_right" />
+  </joint>
+  <link
+    name="bar2_back_right">
+    <inertial>
+      <origin
+        xyz="0.033978401703696 0.0310075509781494 0.00249999999999974"
+        rpy="0 0 0" />
+      <mass
+        value="0.0105010102633798" />
+      <inertia
+        ixx="5.07750472693009E-06"
+        ixy="-5.01950408025556E-06"
+        ixz="-2.03690201844286E-21"
+        iyy="5.73960989932898E-06"
+        iyz="-2.01367005459732E-21"
+        izz="1.07733604168283E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_back_right.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/bar2_back_right.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="bar2_back_right_pivot" />
+  <joint
+    name="joint_bar2_back_right"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="center_back_right_bar2_link" />
+    <child
+      link="bar2_back_right_pivot" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.5708"
+      upper="1.5708"
+      effort="10"
+      velocity="1" />
+  </joint>
+  <joint
+    name="joint_bar2_back_right_mesh"
+    type="fixed">
+    <origin
+      xyz="-0.0025 -0.01705 -0.042724"
+      rpy="1.570796 -0.811374 1.570796" />
+    <parent
+      link="bar2_back_right_pivot" />
+    <child
+      link="bar2_back_right" />
+  </joint>
+  <link
+    name="table_link">
+    <inertial>
+      <origin
+        xyz="-9.37010239009259E-17 6.17838764671444E-16 0.00578440190069766"
+        rpy="0 0 0" />
+      <mass
+        value="0.395241194912214" />
+      <inertia
+        ixx="0.00859776795504631"
+        ixy="2.81406844390508E-18"
+        ixz="1.83372734384748E-18"
+        iyy="0.00182878805013723"
+        iyz="9.07083694915163E-18"
+        izz="0.0103772362248568" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/table_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://3dprototype_urdf/meshes/table_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_table_link"
+    type="prismatic">
+    <origin
+      xyz="0 0 0.11956"
+      rpy="3.1416 0 3.1416" />
+    <parent
+      link="base_link" />
+    <child
+      link="table_link" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.08"
+      upper="0.08"
+      effort="100"
+      velocity="0.2" />
+  </joint>
+</robot>

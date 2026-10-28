@@ -1,0 +1,65 @@
+VERSION "hoverboard-agv-1"
+
+
+NS_ :
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	BA_DEF_DEF_
+	SIG_VALTYPE_
+
+BS_:
+
+BU_: PI HOVERBOARD LIFT
+
+
+BO_ 16 ESTOP: 1 PI
+ SG_ estop : 0|1@1+ (1,0) [0|1] "" HOVERBOARD,LIFT
+
+BO_ 513 HB_CMD: 4 PI
+ SG_ cmd_left : 0|16@1- (1,0) [-32768|32767] "rpm" HOVERBOARD
+ SG_ cmd_right : 16|16@1- (1,0) [-32768|32767] "rpm" HOVERBOARD
+
+BO_ 385 HB_ODOM: 8 HOVERBOARD
+ SG_ ticks_left : 0|32@1- (1,0) [-2147483648|2147483647] "ticks" PI
+ SG_ ticks_right : 32|32@1- (1,0) [-2147483648|2147483647] "ticks" PI
+
+BO_ 641 HB_MOTION: 8 HOVERBOARD
+ SG_ rpm_left : 0|16@1- (1,0) [-32768|32767] "rpm" PI
+ SG_ rpm_right : 16|16@1- (1,0) [-32768|32767] "rpm" PI
+ SG_ current_left : 32|16@1- (0.01,0) [-327.68|327.67] "A" PI
+ SG_ current_right : 48|16@1- (0.01,0) [-327.68|327.67] "A" PI
+
+BO_ 897 HB_STATUS: 8 HOVERBOARD
+ SG_ battery_voltage : 0|16@1+ (0.01,0) [0|655.35] "V" PI
+ SG_ battery_percent : 16|8@1+ (1,0) [0|100] "%" PI
+ SG_ board_temp : 24|8@1- (1,0) [-128|127] "degC" PI
+ SG_ err_left : 32|4@1+ (1,0) [0|15] "" PI
+ SG_ err_right : 36|4@1+ (1,0) [0|15] "" PI
+ SG_ motors_enabled : 40|1@1+ (1,0) [0|1] "" PI
+ SG_ cmd_timeout : 41|1@1+ (1,0) [0|1] "" PI
+ SG_ safe_state : 42|1@1+ (1,0) [0|1] "" PI
+ SG_ estop_active : 43|1@1+ (1,0) [0|1] "" PI
+ SG_ aux_input : 44|1@1+ (1,0) [0|1] "" PI
+ SG_ battery_low : 45|1@1+ (1,0) [0|1] "" PI
+ SG_ temp_warning : 46|1@1+ (1,0) [0|1] "" PI
+ SG_ can_error_counter : 48|8@1+ (1,0) [0|255] "" PI
+ SG_ heartbeat : 56|8@1+ (1,0) [0|255] "" PI
+
+
+CM_ "Hoverboard mainboard (VARIANT_CAN) protocol. IDs shown for CAN_NODE_ID = 1: CMD 0x200+n, ODOM 0x180+n, MOTION 0x280+n, STATUS 0x380+n. All wheel values: positive = robot moves forward.";
+CM_ BU_ PI "Raspberry Pi 5 host (ROS 2).";
+CM_ BU_ HOVERBOARD "Hoverboard mainboard STM32F103RC, hoverboard-firmware-hack VARIANT_CAN.";
+CM_ BU_ LIFT "STM32F411 lift / lights controller.";
+CM_ BO_ 16 "E-stop broadcast. 1 = stop (latched), 0 = release. Hoverboard: active braking to 0 rpm.";
+CM_ BO_ 513 "Wheel speed command, send at 50 Hz. SPD_MODE: rpm, clamped to N_MOT_MAX. VLT/TRQ mode: normalized -1000..1000. No frame for 200 ms (CAN_TIMEOUT): motors de-energized.";
+CM_ BO_ 385 "Hall-sensor odometry, 50 Hz. 6 steps per electrical revolution (~90 per wheel revolution on 15 pole-pair hub motors). Counters wrap: use int32 differences. Reset to 0 at board power-on.";
+CM_ BO_ 641 "Measured wheel speed and DC link current per motor, 50 Hz. Current averaged over the frame period.";
+CM_ BO_ 897 "Status and heartbeat, 10 Hz.";
+CM_ SG_ 897 battery_percent "Estimated from Li-ion cell voltage under load (BAT_CELLS cells).";
+CM_ SG_ 897 err_left "BLDC controller error code: bit0 hall sensors not connected, bit1 hall sensor short circuit, bit2 motor not running (stall).";
+CM_ SG_ 897 err_right "BLDC controller error code: bit0 hall sensors not connected, bit1 hall sensor short circuit, bit2 motor not running (stall).";
+CM_ SG_ 897 safe_state "Any input timeout active: motors de-energized (OPEN_MODE).";
+CM_ SG_ 897 can_error_counter "max(TEC, REC) of the bxCAN controller. Rising values indicate bit timing / wiring problems.";
+CM_ SG_ 897 heartbeat "Increments by 1 per status frame.";
