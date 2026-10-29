@@ -41,7 +41,12 @@ published on `/rack_obstacles` so both costmaps keep the planner out of them.
 8. **Drop** (lift to 0), wait `drop_wait_time`, clear the payload mask.
 9. **Retreat** straight out, restore the normal footprint and inflation, update rack states.
 
-"Navigate to" tasks and "return to dock" use plain Nav2 goals.
+**With lanes, every move stays on them.** The robot backs straight out of a slot or the dock
+along that site's axis to the lane (`_leave_to_lane`), follows the lane graph from where it stands
+(one-way lanes respected) to the site's **entry point** (where the ray from the site centre along
+its face, opposite its yaw, meets the lane), turns on the spot and drives straight in
+(`_approach_site` / `_drive_to_map_point`). Staging, "Navigate to" tasks and "return to dock" use
+the same path; without lanes they are plain Nav2 goals.
 
 ## Closed-loop docking
 
@@ -97,6 +102,12 @@ The GUI publishes JSON on `/mission_control/command` with an `action` field:
 | `teleop` | joystick velocity `lx`, `az` (scaled by `teleop_linear_scale` / `teleop_angular_scale`; `ly` is ignored) |
 | `lift` | raise or lower the lift |
 | `set_speed` | maximum autonomous speed (velocity smoother limit) |
+| `fleet_heartbeat` | from the fleet manager, ~5 Hz: `hold`, `by`, `reason`, `ttl`; optional `retreat` (lane points to back off along) and `retreat_into` (a refuge site). A missing heartbeat for `ttl` holds the robot. Not logged. |
+| `fleet_detach` | leave fleet traffic control and drive on this robot's own |
+
+A fleet hold cancels the running Nav2 goal and re-sends the same goal (or the rest of the lane
+curve) once released, so the task continues; docking, lifting and the straight moves are not
+interrupted. See [fleet.md](fleet.md).
 
 On the real robot the GUI e-stop also latches the hardware e-stop through the CAN bridge service
 `/estop`: the hoverboard brakes and the STM32F411 controller cuts its power

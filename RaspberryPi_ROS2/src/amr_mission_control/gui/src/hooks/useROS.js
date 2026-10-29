@@ -13,6 +13,7 @@ import { scanToMap, detectDynamic } from "../lib/live";
 import { apply } from "../lib/tf";
 
 export const WS_URL = `ws://${window.location.hostname || "localhost"}:9090`;
+export const rosUrl = (host, port = 9090) => `ws://${host}:${port}`;
 const BACKOFF = [1, 2, 3, 5, 8];
 
 const GRID = "nav_msgs/msg/OccupancyGrid";
@@ -90,7 +91,7 @@ function handlerFor(key, live) {
   };
 }
 
-export function useROS(enabled = true, live, sensors = []) {
+export function useROS(enabled = true, live, sensors = [], url = WS_URL) {
   const [status, setStatus] = useState(enabled ? "connecting" : "off");
   const [retryAt, setRetryAt] = useState(null);
   const [missionState, setMissionState] = useState(DEFAULT_STATE);
@@ -126,7 +127,7 @@ export function useROS(enabled = true, live, sensors = []) {
     };
 
     try {
-      conn = new ROSLIB.Ros({ url: WS_URL });
+      conn = new ROSLIB.Ros({ url });
     } catch {
       setStatus("offline");
       scheduleRetry();
@@ -191,7 +192,7 @@ export function useROS(enabled = true, live, sensors = []) {
         conn.close();
       } catch { /* already closed */ }
     };
-  }, [enabled, attempt, live]);
+  }, [enabled, attempt, live, url]);
 
   // Visualisation topics, on demand.
   const sensorKey = [...new Set(sensors)].sort().join(",");
@@ -230,5 +231,5 @@ export function useROS(enabled = true, live, sensors = []) {
     setAttempt((a) => a + 1);
   }, []);
 
-  return { status, retryAt, missionState, feedbackLog, plan, sendCommand, retryNow, url: WS_URL };
+  return { status, retryAt, missionState, feedbackLog, plan, sendCommand, retryNow, url };
 }

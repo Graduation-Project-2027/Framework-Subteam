@@ -16,6 +16,18 @@ LEVERAGE is a rack-lifting autonomous mobile robot. Mission control is the singl
 
 Success: an operator can queue and run a transport mission, and a jury member can understand what the robot is doing, from the screen alone.
 
+## Fleet
+
+The laptop runs `fleet_server.py` and manages several robots; robots only run `launcher_server.py` and the stack, all from an identical copy of the repo (identity in `~/.ros/amr_robot.json`).
+
+- Discovery by UDP beacon (8089); a robot is managed only after it is added (first-time setup gives it a Robot ID).
+- Awareness: each robot's costmaps mark the other robots from `/fleet/peers` (`fleet_layer`).
+- Traffic: path reservations, priority holds (`fleet_heartbeat` / hold in `mission_manager`), deadlock breaker; lost heartbeat = hold.
+- Map sync with fingerprints (laptop library ↔ robots) and live map edits, one global layout (lanes, racks, zones, occupancy), dispatch to the best free robot, per-robot settings.
+- Lanes only during a task; every site has a face, the robot enters straight from its entry point on the lane. One-way lanes for loops.
+- Traffic: holds, back-off along the lane / up a spur, refuges (under occupied racks when empty, free slots when carrying), hold-loop breaker.
+- A new Raspberry Pi is set up from the GUI over SSH (`provision.py`): hostname = Robot ID, ROS 2 Jazzy, upload + build, boot service; deploy updates later.
+
 ## Operating Context
 
 - Talks to ROS 2 through rosbridge (`ws://<host>:9090`): subscribes `/mission_control/state`, `/mission_control/feedback`, `/plan`; publishes JSON commands on `/mission_control/command`.

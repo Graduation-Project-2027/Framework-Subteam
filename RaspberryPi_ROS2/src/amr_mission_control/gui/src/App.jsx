@@ -1,7 +1,9 @@
 import { Component, useState, useCallback, useRef, useEffect } from "react";
-import { Tabs } from "radix-ui";
-import { MotionConfig, AnimatePresence, motion } from "motion/react";
-import { useMission, useMediaQuery } from "./hooks/useMission";
+import { MotionConfig, AnimatePresence } from "motion/react";
+import { useMission, useMediaQuery, readPreviewFlag, writePreviewFlag } from "./hooks/useMission";
+import { useFleet } from "./hooks/useFleet";
+import PanelTabs from "./components/PanelTabs";
+import FleetShell from "./components/fleet/FleetShell";
 import { useMapEditor } from "./hooks/useStack";
 import { useDrive } from "./hooks/useDrive";
 import { useStackPrefs } from "./lib/stackPrefs";
@@ -37,38 +39,8 @@ class ErrorBoundary extends Component {
   }
 }
 
-function PanelTabs({ tabs, value, onValueChange, label }) {
-  const current = tabs.some((t) => t.id === value) ? value : tabs[0].id;
-  return (
-    <Tabs.Root className="tabs" value={current} onValueChange={onValueChange}>
-      <Tabs.List className="tabs__list" aria-label={label}>
-        {tabs.map((t) => (
-          <Tabs.Trigger key={t.id} value={t.id} className="tabs__trigger">
-            {t.label}
-            {t.badge != null && <span className="tabs__badge num">{t.badge}</span>}
-          </Tabs.Trigger>
-        ))}
-      </Tabs.List>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={current}
-          className="tabs__panel"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.12 }}
-        >
-          <Tabs.Content value={current} forceMount className="tabs__content">
-            {tabs.find((t) => t.id === current).render()}
-          </Tabs.Content>
-        </motion.div>
-      </AnimatePresence>
-    </Tabs.Root>
-  );
-}
-
-function Shell() {
-  const m = useMission();
+function Shell({ target, workspace, onWorkspace, consoleLabel, fleetPreview, robots, onPickRobot, fleetLink }) {
+  const m = useMission(target, fleetPreview);
   const toast = useToast();
   const wide = useMediaQuery("(min-width: 1280px)");
   const medium = useMediaQuery("(min-width: 900px)");
@@ -235,6 +207,13 @@ function Shell() {
         stack={m.stack}
         stackMode={m.stackMode}
         onOpenSystem={() => setSystemOpen(true)}
+        workspace={workspace}
+        onWorkspace={onWorkspace}
+        consoleLabel={consoleLabel}
+        robots={robots}
+        currentHost={target?.host}
+        onPickRobot={onPickRobot}
+        fleetLink={fleetLink}
       />
       {layout === "narrow" ? (
         <>
@@ -264,13 +243,107 @@ function Shell() {
   );
 }
 
+function readRoute() {
+  const p = new URLSearchParams(window.location.search);
+  const host = p.get("robot");
+  return {
+    workspace: p.get("view") === "robot" ? "robot" : "fleet",
+    target: host ? { host, launcher: +p.get("launcher") || 8088, rosbridge: +p.get("rosbridge") || 9090, label: p.get("label") || host } : null,
+  };
+}
+
+function writeRoute(workspace, target) {
+  const url = new URL(window.location.href);
+  ["view", "robot", "launcher", "rosbridge", "label"].forEach((k) => url.searchParams.delete(k));
+  if (workspace === "robot") {
+    url.searchParams.set("view", "robot");
+    if (target) {
+      url.searchParams.set("robot", target.host);
+      if (target.launcher !== 8088) url.searchParams.set("launcher", target.launcher);
+      if (target.rosbridge !== 9090) url.searchParams.set("rosbridge", target.rosbridge);
+      if (target.label !== target.host) url.searchParams.set("label", target.label);
+    }
+  }
+  window.history.replaceState(null, "", url.toString().replace("preview=", "preview"));
+}
+
+/** Fleet (the laptop's view of every robot) or one robot's console. */
+function Workspaces() {
+  const [route, setRoute] = useState(readRoute);
+  const [preview, setPreviewState] = useState(readPreviewFlag);
+  const fleet = useFleet(preview);
+
+  const go = useCallback((workspace, target = route.target) => {
+    writeRoute(workspace, target);
+    setRoute({ workspace, target });
+    // The robot console keeps its own preview switch; pick it up on return.
+    if (workspace === "fleet") setPreviewState(readPreviewFlag());
+  }, [route.target]);
+  const setPreview = useCallback((on) => { writePreviewFlag(on); setPreviewState(on); }, []);
+
+  const targetOf = (r) => ({ host: r.host, launcher: r.launcher || 8088, rosbridge: r.rosbridge || 9090, label: r.label });
+  const openConsole = useCallback((r) => go("robot", targetOf(r)), [go]);
+  const fleetRobots = fleet.state.robots.filter((r) => r.adopted);
+
+  // In Preview the console always shows a fleet robot (the first, if none chosen).
+  let target = route.target;
+  if (preview && route.workspace === "robot" && !fleetRobots.some((r) => r.host === target?.host) && fleetRobots[0]) {
+    target = targetOf(fleetRobots[0]);
+  }
+  const consoleLabel = target?.label || "Robot";
+
+  // How this robot stands with the fleet: same map copy, layout in sync.
+  const fleetLink = (() => {
+    if (route.workspace !== "robot" || fleet.status !== "online") return null;
+    const r = fleet.state.robots.find((x) => x.host === target?.host);
+    if (!r || !r.adopted) return { inFleet: false };
+    const lib = fleet.maps?.library.find((m) => m.name === fleet.fleetMap);
+    const own = (fleet.maps?.robots?.[r.key] || []).find((m) => m.name === fleet.fleetMap);
+    return {
+      inFleet: true,
+      map: fleet.fleetMap,
+      running: r.stack?.running ? r.stack.map : null,
+      sameCopy: !!(lib && own && own.fingerprint === lib.fingerprint),
+      layout: r.layout_sync,
+      rev: fleet.state.layout?.rev,
+    };
+  })();
+
+  if (route.workspace === "robot") {
+    return (
+      <Shell
+        key={`${preview ? "p" : "l"}:${target?.host || "local"}`}
+        target={target}
+        workspace="robot"
+        onWorkspace={(w) => go(w)}
+        consoleLabel={consoleLabel}
+        fleetPreview={preview && fleet.client.kind === "preview" ? fleet.client : null}
+        robots={fleetRobots}
+        onPickRobot={(r) => go("robot", r ? targetOf(r) : null)}
+        fleetLink={fleetLink}
+      />
+    );
+  }
+  return (
+    <FleetShell
+      fleet={fleet}
+      workspace="fleet"
+      onWorkspace={(w) => go(w)}
+      consoleLabel={consoleLabel}
+      onOpenConsole={openConsole}
+      onPreview={() => setPreview(true)}
+      onExitPreview={() => setPreview(false)}
+    />
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <MotionConfig reducedMotion="user">
         <TipProvider>
           <ToastProvider>
-            <Shell />
+            <Workspaces />
           </ToastProvider>
         </TipProvider>
       </MotionConfig>

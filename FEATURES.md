@@ -12,7 +12,7 @@ How to use each feature step by step: [USER_GUIDE.md](USER_GUIDE.md).
 ---
 
 ## 1. The system at a glance
-
+   
 | Layer | What it is | Where |
 |---|---|---|
 | Mission control GUI | React web app: planning, live map, RViz-style layers, stack launcher, map library and editor | `RaspberryPi_ROS2/src/amr_mission_control/gui` |
@@ -254,6 +254,27 @@ browser.
   dynamic obstacle.
 - Nothing is ever sent to hardware. Ideal for demos, presentations and GUI development.
 
+### 2.15 Fleet workspace (several robots, one laptop)
+
+![Fleet view](RaspberryPi_ROS2/images/gui-fleet-3d.jpg)
+
+- **Fleet | Robot ▾** switch in the top bar; the robot menu opens any robot's console, whose top
+  bar shows the fleet map and whether the robot has the same copy and layout.
+- **Automatic discovery**: robots announce themselves (UDP beacon); new ones wait for first-time
+  setup (Robot ID, ROS domain); duplicate IDs and shared domains are flagged.
+- **3D floor** (React Three Fiber): the map printed on paper, real walls extruded, racks as ink
+  frames that ride on the robot when carried, gold lane tape with one-way arrows, each robot's
+  chassis with the red disc, reserved floor, planned paths and back-off paths.
+- **Traffic card, holds and back-offs** explained in words ("AMR-03 holds for AMR-01: paths cross").
+- **Dispatch** to the best free robot with the reason shown; **Pause / Dock / E-stop all**.
+- **Robot settings** stored on the robot: ID, name, speed, traffic priority, ROS domain, notes.
+- **Map sync** matrix (same copy / different / missing / running) and **live map editing**.
+- **Layout tab**: lanes drawn like a schematic (snap to nodes, link, close loops, open ends, drag
+  and delete nodes, one-way lanes) and racks / drop zones with their **face** aimed at a lane.
+- **Set up a new Raspberry Pi** over SSH from the GUI, with a live log; **Deploy code** later.
+
+![Layout editing](RaspberryPi_ROS2/images/gui-fleet-layout.jpg)
+
 ---
 
 ## 3. Robot software (ROS 2 Jazzy)
@@ -267,6 +288,19 @@ browser.
 - Saved maps live in `src/amr_navigation/maps` (`AMR_MAPS_DIR`); deleted maps go to
   `~/.ros/amr_map_trash`; the default map and last choices are in `~/.ros/amr_launcher.json`.
 - Migrates the old `~/.ros/agv_*` files and honours old `AGV_*` variables after the AMR rename.
+
+### 3.1b Fleet manager (`fleet_server.py`, laptop)
+
+- Standard-library HTTP service on port 8090; rosbridge link to every robot in the fleet.
+- **Traffic control** at 5 Hz: path reservations, holds with a heartbeat lease (a robot that loses
+  the laptop holds), "in the way goes first", back-off along the lane or up a rack spur, refuges
+  (under an occupied rack when empty, a free slot when carrying), hold-loop breaker, deadlock and
+  stuck-behind-parked reports.
+- Relays every robot's footprint to the others on `/fleet/peers` (`fleet_layer` in both costmaps).
+- **Map library** with fingerprints, pull/push and live edits (robots reload via
+  `map_server_static/load_map`); one shared **layout** with rack occupancy kept in sync.
+- **Pi setup over SSH** (`provision.py`): hostname + mDNS, ROS 2 Jazzy, workspace upload and
+  build, Robot ID, `amr-launcher` boot service, laptop key, password change; **deploy** updates.
 
 ### 3.2 Mission manager
 

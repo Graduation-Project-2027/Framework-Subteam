@@ -1,10 +1,10 @@
 /** HTTP client for launcher_server.py (stack control + map library). */
 export const LAUNCHER_URL = `http://${window.location.hostname || "localhost"}:8088`;
 
-async function call(path, { method = "GET", body, raw = false } = {}) {
+async function callAt(base, path, { method = "GET", body, raw = false } = {}) {
   let res;
   try {
-    res = await fetch(`${LAUNCHER_URL}${path}`, {
+    res = await fetch(`${base}${path}`, {
       method,
       body,
       cache: "no-store",
@@ -24,7 +24,8 @@ async function call(path, { method = "GET", body, raw = false } = {}) {
 
 const enc = encodeURIComponent;
 
-export function createHttpStack() {
+export function createHttpStack(base = LAUNCHER_URL) {
+  const call = (path, opts) => callAt(base, path, opts);
   return {
     kind: "http",
     status: () => call("/api/status"),

@@ -59,6 +59,16 @@ cd src/amr_mission_control/gui && npm run dev -- --host     # http://<robot-ip>:
 **No robot at all?** `npm install && npm run dev` in `src/amr_mission_control/gui`, then open
 <http://localhost:5173/?preview>: the robot, SLAM, lidars and costmaps are simulated in the browser.
 
+**Several robots.** The laptop runs the fleet manager and the GUI; each robot runs the stack and
+`launcher_server.py` (installed as the `amr-launcher` service by the GUI's Pi setup). See
+[docs/fleet.md](docs/fleet.md).
+
+```bash
+pip install paramiko                                    # laptop, once (Pi setup over SSH)
+python3 src/amr_mission_control/fleet_server.py         # laptop, port 8090
+cd src/amr_mission_control/gui && npm run dev           # Fleet workspace
+```
+
 Hardware setup (CAN bus, lidar ports, IMU wiring) must be done once before the first real-robot
 launch: see [docs/hardware.md](docs/hardware.md).
 
@@ -116,7 +126,7 @@ flowchart LR
 | `amr_bringup` | Base bringup (real or Gazebo), EKF, Gazebo bridge config, teleop TUI |
 | `amr_mapping` | Dual-lidar scan pipeline (filters, payload filter, scan merger), SLAM mapping |
 | `amr_navigation` | SLAM Toolbox localization + Nav2 config, saved maps, navigation launch |
-| `amr_mission_control` | Mission manager node, React/Vite GUI, launcher service (stack control + map library) |
+| `amr_mission_control` | Mission manager node, React/Vite GUI, launcher service (stack control, map library, robot identity), fleet manager and Pi setup over SSH (`fleet_server.py`, `provision.py`, `map_bundle.py`) |
 
 ## Documentation
 
@@ -128,6 +138,7 @@ flowchart LR
 | [docs/hardware.md](docs/hardware.md) | Raspberry Pi 5 setup, CAN bus, hoverboard board, e-stop controller, lidars, IMU, first-drive checklist |
 | [docs/ros_interfaces.md](docs/ros_interfaces.md) | All topics, services, TF frames and parameter files |
 | [docs/mission_control.md](docs/mission_control.md) | Mission manager, GUI, closed-loop docking and payload filter design |
+| [docs/fleet.md](docs/fleet.md) | Fleet manager: discovery, traffic control, lanes and rack faces, map sync, Pi setup over SSH |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Known issues, fixes and their history |
 | [docs/AMR_Software_Documentation.tex](docs/AMR_Software_Documentation.tex) | Formal report of the docking redesign |
 

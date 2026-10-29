@@ -77,7 +77,7 @@ export function MappingBar({ stack, live, prefs }) {
 }
 
 /** Tools for painting into a saved map. */
-export function MapEditorBar({ editor }) {
+export function MapEditorBar({ editor, savedNote = "Planning uses it the next time navigation starts on this map, or right away if the robot navigates on it now." }) {
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   const { tool, value, size, dirty, saving, undoCount, redoCount } = editor;
@@ -103,7 +103,7 @@ export function MapEditorBar({ editor }) {
   }, [editor, size]);
 
   const save = () => editor.save()
-    .then(() => toast({ title: `${editor.name} saved`, body: "Planning uses it the next time navigation starts on this map." }))
+    .then(() => toast({ title: `${editor.name} saved`, body: savedNote }))
     .catch((e) => toast({ title: "Edits not saved", body: e.message, tone: "error" }));
 
   return (

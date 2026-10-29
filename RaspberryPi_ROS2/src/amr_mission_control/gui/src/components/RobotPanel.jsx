@@ -96,6 +96,12 @@ function RobotPanel({ missionState, sendCommand, disabled, drive }) {
             <span className="status__hint">{disabled ? "Live data appears once rosbridge connects." : meta.hint}</span>
           </motion.div>
         </AnimatePresence>
+        {!disabled && missionState.fleet?.held && (
+          <p className="holdnote">
+            Held by fleet traffic{missionState.fleet.by ? <> for <b>{missionState.fleet.by}</b></> : null}
+            {missionState.fleet.reason ? ` (${missionState.fleet.reason})` : ""}. It continues the same task once the way is clear.
+          </p>
+        )}
 
         {task && !disabled ? (
           <div className="task-now">

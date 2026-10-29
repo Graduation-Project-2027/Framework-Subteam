@@ -24,6 +24,7 @@ argument see [RaspberryPi_ROS2/docs/launch.md](RaspberryPi_ROS2/docs/launch.md).
 16. [Keyboard shortcuts](#16-keyboard-shortcuts)
 17. [Troubleshooting](#17-troubleshooting)
 18. [Upgrading from the old AGV names](#18-upgrading-from-the-old-agv-names)
+19. [Run a fleet (several robots, one laptop)](#19-run-a-fleet-several-robots-one-laptop)
 
 ---
 
@@ -308,3 +309,112 @@ Nothing is lost: on first start the mission manager copies `~/.ros/agv_locations
 `~/.ros/amr_locations.json`, and the launcher moves `~/.ros/agv_launcher.json` and
 `~/.ros/agv_map_trash`. The old `AGV_MAPS_DIR` / `AGV_LAUNCHER_PORT` variables are still honoured.
 Update any scripts or aliases that call `ros2 launch agv_…`.
+
+## 19. Run a fleet (several robots, one laptop)
+
+The laptop manages the fleet; robots never talk to each other directly. Every robot runs the
+**same copy** of this repository; what makes a robot itself lives in `~/.ros/amr_robot.json`.
+Technical reference: [RaspberryPi_ROS2/docs/fleet.md](RaspberryPi_ROS2/docs/fleet.md).
+
+![Fleet view](RaspberryPi_ROS2/images/gui-fleet-3d.jpg)
+
+**Try it first.** Open the GUI with `?preview` and stay on **Fleet**: three simulated robots work
+the Hang1 layout on a one-way loop, a fourth turns up on the network waiting for setup, and the
+traffic rules are the ones `fleet_server.py` runs.
+
+### 19.1 Start the fleet manager (laptop)
+
+```bash
+pip install paramiko                                  # once: needed to set up Pis over SSH
+python3 src/amr_mission_control/fleet_server.py       # http://<laptop>:8090
+cd src/amr_mission_control/gui && npm run dev         # open the Fleet workspace
+```
+
+The laptop needs Python 3 and this repository; it does not need ROS.
+
+### 19.2 Set up a new robot from the GUI
+
+1. Flash **Ubuntu Server 24.04 (64-bit)** on the Pi's SD card, boot it on the same network and
+   note its IP address (or its default hostname).
+2. **Fleet › Set up a new Raspberry Pi.** Enter the address, user (`ubuntu`) and password, press
+   **Connect**. The sheet shows what is on the Pi.
+3. Check the suggested **Robot ID** (`AMR-04`); the **hostname** follows it (`amr-04`, reachable as
+   `amr-04.local`). Optionally a name, the ROS domain (one per robot) and a **new password**.
+4. Press **Set up AMR-04**. The laptop names the Pi, installs ROS 2 Jazzy, uploads and builds this
+   workspace, runs `install_dependencies.sh`, sets the Robot ID, installs the launcher as a service
+   that starts at boot and adds the robot to the fleet. A first setup takes 30–60 minutes; you can
+   close the sheet, the job keeps running (reopen with **Show the Pi setup**).
+5. Send it the fleet's map (**Send Hang1** on its card) and **Start navigation**.
+
+**Deploy code** in a robot's panel uploads your latest workspace to it, builds and restarts its
+launcher (stop its stack first). No password needed: the setup installed the laptop's key.
+
+Already have a robot running `launcher_server.py`? It shows under **Found on the network** within a
+second; **Set up** gives it its Robot ID. If broadcasts are blocked, use **Add it by address**.
+
+### 19.3 Lanes, racks and their faces (Layout tab)
+
+![Layout editing](RaspberryPi_ROS2/images/gui-fleet-layout.jpg)
+
+**Draw lane** (the view switches to Plan): click to place points. Near an existing node the
+cursor snaps onto it, and clicking there **links** the new lane to it; clicking the lane's own
+**first point closes the loop**. Each end can be **Connect** (joins the lane it touches) or **Open**
+(keeps an open end, drawn as a stop bar). **Enter** finishes, **Esc** cancels.
+
+**Edit nodes** shows every lane node: drag one to move it (every lane through it follows), drop it
+on another node to **link** them, select one and press **Delete** to remove it. Gold rings are open
+ends. The arrow button on a lane makes it **one-way** (driven only in the order it was drawn;
+arrows on the floor); the swap button reverses it. Use one-way lanes for loops: robots then only
+follow each other and never meet head-on.
+
+**Racks and drop zones**: every site has a **face**, the arrow from the site to the lane. Where the
+arrow meets the lane is the **only** point a robot enters from, straight in and at 90° to the lane.
+**Add rack** / **Add drop zone**, then click the floor: the site is placed and aimed square at the
+nearest lane. Each row says which lane it faces; **Face the next lane** turns it to another lane,
+**Move** re-places it, the name is edited in place. A site that isn't square to a lane is flagged.
+
+### 19.4 How robots drive and keep apart
+
+**Lanes only.** Once lanes exist, a robot never plans a free path during a task: it backs straight
+out of a rack slot or its dock along that site's axis to the lane, follows the lanes to the
+target's entry point, squares up and drives straight in. Place docks so their face meets a lane.
+
+**Keeping apart.** Every driving robot reserves the next few metres of its path (the light strip
+on the floor). Where two reservations overlap, one robot holds in place and continues the same
+task once the way is clear:
+
+- a robot standing in the other's path goes first (a leader before its follower);
+- otherwise **Traffic priority**, then a robot carrying a rack, then whoever started first;
+- head-on, the robot with the shorter way out **backs off** along the lane (or back up its rack's
+  spur) and waits; if the lane can't clear it, it takes a **refuge**: under an occupied rack when
+  empty, only into a free location when carrying;
+- a circle of holds lets one robot go; two robots that still block each other are reported so you
+  can drive one aside; a robot stuck behind a parked one gets a **Dock** button for the parked one.
+
+Each robot's costmaps also mark the other robots (`/fleet/peers`), so Nav2 sees robots around
+corners its lidar can't.
+
+> Safety: robots under fleet control need the laptop's heartbeat to drive. If the fleet manager
+> stops, they hold position (docking and lifting are not interrupted). To run a robot on its own
+> again, remove it from the fleet, or send `{"action": "fleet_detach"}` from its console.
+
+### 19.5 Maps
+
+Robots share coordinates only when they localize on the same pose graph. **Maps** keeps the
+laptop's master copy of each map and shows each robot as *same copy*, *different* or *missing*;
+copy a robot's map to the library, then send it to the others. A robot running a map can't have it
+replaced until its stack stops. The **pencil** on the floor edits the fleet's map **live**: paint
+walls or free floor, **Save**, and every robot with that copy gets it, robots navigating on it
+reload it immediately.
+
+### 19.6 Each robot
+
+**Robot tab**: Robot ID, name, max speed, traffic priority, ROS domain and notes, saved on the robot
+itself. **Console** (or the **Robot ▾** menu in the top bar) opens that robot's full mission control;
+its top bar shows the fleet's map and whether this robot has the same copy and layout. **Dispatch**
+sends a transport to the best free robot and says why it chose it.
+
+**What runs where.** Preview simulates everything in the browser; on the real system the same rules
+run in `fleet_server.py` (laptop) and `mission_manager_node.py` (each robot). Back-offs reverse the
+Nav2 controller along the lane (MPPI `vx_min` -0.3); check that on the real robot before trusting it
+in a narrow aisle.

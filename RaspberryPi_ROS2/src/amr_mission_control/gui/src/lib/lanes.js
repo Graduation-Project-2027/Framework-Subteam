@@ -61,8 +61,9 @@ export function smoothPolyline(input, radius = DEFAULT_RADIUS, step = 0.05) {
   return res;
 }
 
-/** Lane graph exactly as the mission manager builds it. */
-export function buildGraph(lanes) {
+/** Lane graph exactly as the mission manager builds it. `directed`: one-way
+ *  lanes only link their points in order (for routing; drawing needs both). */
+export function buildGraph(lanes, directed = false) {
   const nodes = [];
   const adj = [];
   const find = (x, y) => {
@@ -75,12 +76,13 @@ export function buildGraph(lanes) {
   };
   for (const lane of lanes || []) {
     let prev = null;
+    const oneway = directed && lane.oneway;
     for (const p of lane.points || []) {
       const i = find(Number(p.x), Number(p.y));
-      if (prev !== null && prev !== i && !adj[i].some((e) => e.j === prev)) {
+      if (prev !== null && prev !== i) {
         const d = hyp(nodes[i], nodes[prev]);
-        adj[i].push({ j: prev, d });
-        adj[prev].push({ j: i, d });
+        if (!adj[prev].some((e) => e.j === i)) adj[prev].push({ j: i, d });
+        if (!oneway && !adj[i].some((e) => e.j === prev)) adj[i].push({ j: prev, d });
       }
       prev = i;
     }
@@ -153,20 +155,69 @@ function segIntersect(p, p2, q, q2) {
  * junction point in both lanes. Returns the new lane points and the updated
  * existing lanes.
  */
-export function connectLane(points, lanes) {
+/** What a lane end at p would join: an existing lane point, or the nearest
+ *  spot on a lane within `reach`. null = it stays an open end. */
+export function endTarget(p, lanes, reach = MERGE_DIST) {
+  if (!p) return null;
+  let best = null;
+  for (const l of lanes || []) {
+    for (const q of l.points) {
+      const d = hyp(p, q);
+      if (d < MERGE_DIST && (!best || d < best.d)) best = { x: q.x, y: q.y, d, lane: l };
+    }
+  }
+  if (best) return best;
+  for (const l of lanes || []) {
+    for (let s = 0; s < l.points.length - 1; s++) {
+      const f = project(p, l.points[s], l.points[s + 1]);
+      if (f.d < reach && (!best || f.d < best.d)) best = { x: f.x, y: f.y, d: f.d, lane: l };
+    }
+  }
+  return best;
+}
+
+/** An open end closer than MERGE_DIST to a lane point still merges into it
+ *  (the robot's lane graph joins points that close), so it can't stay open. */
+export function endCanStayOpen(p, lanes) {
+  return !(lanes || []).some((l) => l.points.some((q) => hyp(p, q) < MERGE_DIST));
+}
+
+/** Copy of the lanes with a node where p lies on a lane (within maxD), so a
+ *  route can start from the middle of a lane instead of a node behind it. */
+export function splitLanesAt(lanes, p, maxD = 0.35) {
+  let best = null;
+  (lanes || []).forEach((l, li) => {
+    for (let s = 0; s < l.points.length - 1; s++) {
+      const f = project(p, l.points[s], l.points[s + 1]);
+      if (f.d < maxD && (!best || f.d < best.f.d)) best = { li, s, f };
+    }
+  });
+  if (!best) return lanes;
+  const out = lanes.map((l) => ({ ...l, points: l.points.map((q) => ({ x: q.x, y: q.y })) }));
+  out[best.li].points.splice(best.s + 1, 0, { x: best.f.x, y: best.f.y });
+  return out;
+}
+
+/**
+ * Join a drawn polyline to the lane network. `start` / `end`: snap that end
+ * onto a lane within `reach` (false leaves it open). `closed`: the last point
+ * joins the first, making a loop. Crossings always become junctions.
+ */
+export function connectLane(points, lanes, { start = true, end = true, closed = false, reach = MERGE_DIST } = {}) {
   let pts = points.map((p) => ({ x: p.x, y: p.y }));
+  if (closed && pts.length >= 3) pts.push({ ...pts[0] });
   let others = (lanes || []).map((l) => ({ ...l, points: l.points.map((p) => ({ x: p.x, y: p.y })) }));
   const nodesOf = () => others.flatMap((l) => l.points);
 
   const snapEnd = (idx) => {
     const p = pts[idx];
-    const node = nodesOf().find((q) => hyp(p, q) < MERGE_DIST);
+    const node = nodesOf().find((q) => hyp(p, q) < Math.max(MERGE_DIST, reach));
     if (node) { pts[idx] = { ...node }; return; }
     let best = null;
     others.forEach((l, li) => {
       for (let s = 0; s < l.points.length - 1; s++) {
         const f = project(p, l.points[s], l.points[s + 1]);
-        if (f.d < MERGE_DIST && (!best || f.d < best.f.d)) best = { li, s, f };
+        if (f.d < reach && (!best || f.d < best.f.d)) best = { li, s, f };
       }
     });
     if (best) {
@@ -175,8 +226,10 @@ export function connectLane(points, lanes) {
       pts[idx] = { ...foot };
     }
   };
-  snapEnd(0);
-  if (pts.length > 1) snapEnd(pts.length - 1);
+  if (!closed) {
+    if (start) snapEnd(0);
+    if (end && pts.length > 1) snapEnd(pts.length - 1);
+  }
 
   const insertOnLane = (lane, p) => {
     for (let k = 0; k < lane.points.length - 1; k++) {
@@ -252,4 +305,97 @@ export function laneRoute(lanes, from, target) {
   path.reverse();
   if (hyp(path[path.length - 1], best.foot) > 0.05) path.push(best.foot);
   return path;
+}
+
+/** Closest point on the lane network to p: { x, y, d } or null. */
+export function nearestLanePoint(lanes, p) {
+  let best = null;
+  for (const l of lanes || []) {
+    for (let s = 0; s < l.points.length - 1; s++) {
+      const f = project(p, l.points[s], l.points[s + 1]);
+      if (!best || f.d < best.d) best = { x: f.x, y: f.y, d: f.d };
+    }
+  }
+  return best;
+}
+
+/**
+ * Lane-only route from a to b, both on the lanes (the robot's spot and the
+ * foot of its target): split the lanes there, shortest way through the
+ * graph, corners rounded. Never leaves the lanes. null when not connected.
+ */
+export function lanePath(lanes, a, b, radius = DEFAULT_RADIUS, step = 0.1) {
+  const split = splitLanesAt(splitLanesAt(lanes, a, 0.15), b, 0.15);
+  const { nodes, adj } = buildGraph(split, true);
+  const near = (p) => nodes.reduce((k, n, i) => (hyp(n, p) < hyp(nodes[k], p) ? i : k), 0);
+  const s = near(a), t = near(b);
+  if (s === t) return [{ x: a.x, y: a.y }, { x: b.x, y: b.y }];
+  const dist = nodes.map(() => Infinity), prev = nodes.map(() => -1), done = nodes.map(() => false);
+  dist[s] = 0;
+  for (;;) {
+    let u = -1;
+    for (let i = 0; i < nodes.length; i++) if (!done[i] && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0 || dist[u] === Infinity || u === t) break;
+    done[u] = true;
+    for (const e of adj[u]) if (dist[u] + e.d < dist[e.j]) { dist[e.j] = dist[u] + e.d; prev[e.j] = u; }
+  }
+  if (dist[t] === Infinity) return null;
+  const path = [];
+  for (let i = t; i !== -1; i = prev[i]) path.push({ x: nodes[i].x, y: nodes[i].y });
+  path.reverse();
+  path[0] = { x: a.x, y: a.y };
+  path[path.length - 1] = { x: b.x, y: b.y };
+  return smoothPolyline(path, radius, step);
+}
+
+/**
+ * Faces a site can take: for every lane segment the site projects onto,
+ * the yaw whose face (opposite the yaw) points straight at it, at 90° to
+ * the lane, with the entry point. Nearest first. The robot enters along
+ * the face, so this is how a rack is aimed at the lane it is served from.
+ */
+export function siteFaces(lanes, site) {
+  const out = [];
+  for (const l of lanes || []) {
+    for (let s = 0; s < l.points.length - 1; s++) {
+      const A = l.points[s], B = l.points[s + 1];
+      const L = hyp(A, B);
+      if (L < 1e-3) continue;
+      const t = ((site.x - A.x) * (B.x - A.x) + (site.y - A.y) * (B.y - A.y)) / (L * L);
+      if (t < 0.02 || t > 0.98) continue;
+      const fx = A.x + (B.x - A.x) * t, fy = A.y + (B.y - A.y) * t;
+      const d = Math.hypot(fx - site.x, fy - site.y);
+      if (d < 0.3) continue;
+      out.push({ x: fx, y: fy, d, lane: l, yaw: Math.atan2(site.y - fy, site.x - fx) });
+    }
+  }
+  return out.sort((p, q) => p.d - q.d);
+}
+
+export const SNAP_DIST = 0.4;
+
+/** What a click at p links to while drawing: the draft's own first point
+ *  (closes the loop), else an existing lane node within SNAP_DIST. */
+export function snapToNode(p, nodes, draft) {
+  const first = draft?.points?.[0];
+  if (first && draft.points.length >= 3 && hyp(first, p) < SNAP_DIST) return { x: first.x, y: first.y, close: true };
+  let best = null;
+  for (const n of nodes || []) {
+    const d = hyp(n, p);
+    if (d < SNAP_DIST && (!best || d < best.d)) best = { x: n.x, y: n.y, d };
+  }
+  return best;
+}
+
+/** Move every lane point on node `from` (same node = within MERGE_DIST) to `to`.
+ *  Dropping it on another node links the two. */
+export function moveNode(lanes, from, to) {
+  return lanes.map((l) => ({ ...l, points: l.points.map((p) => (hyp(p, from) < MERGE_DIST ? { x: to.x, y: to.y } : p)) }));
+}
+
+/** Remove a node: its neighbours on each lane join up; lanes left with
+ *  fewer than two points disappear. */
+export function deleteNode(lanes, node) {
+  return lanes.map((l) => ({ ...l, points: l.points.filter((p) => hyp(p, node) >= MERGE_DIST) }))
+    .filter((l) => l.points.length >= 2);
 }

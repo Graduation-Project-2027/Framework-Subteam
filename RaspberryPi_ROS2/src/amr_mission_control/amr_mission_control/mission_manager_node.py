@@ -106,6 +106,18 @@ class MissionManagerNode(Node):
         self._cancel_requested = False
         self._nav_goal_handle = None
 
+        # ── Fleet traffic (fleet_server.py on the laptop) ────────────
+        # Once a fleet manager sends a heartbeat the robot is "managed":
+        # every Nav2 drive needs a fresh heartbeat. A hold, or a lease that
+        # runs out (laptop gone), stops the drive in place; the same goal is
+        # re-sent when the way is clear, so the task itself continues.
+        self._fleet = {"managed": False, "manager": "", "beat": 0.0, "ttl": 2.0,
+                       "hold": False, "by": "", "reason": "",
+                       # Back-off path along the lane (head-on): driven in
+                       # reverse once, then the robot holds there.
+                       "retreat": None, "retreat_id": None, "retreat_done": None,
+                       "retreat_into": None}
+
         # ── Locations ────────────────────────────────────────────────
         # Persist to ~/.ros/amr_locations.json by default — survives
         # colcon rebuilds (the install/.../config/locations.json copy
@@ -459,6 +471,9 @@ class MissionManagerNode(Node):
             return
 
         action = cmd.get("action", "")
+        if action == "fleet_heartbeat":  # several per second; not logged
+            self._handle_fleet_heartbeat(cmd)
+            return
         self.get_logger().info(f"Command received: {action}")
 
         if action == "add_task":
@@ -497,6 +512,8 @@ class MissionManagerNode(Node):
             self._set_location_state(cmd.get("id", ""), cmd.get("state", ""))
         elif action == "update_lanes":
             self._handle_update_lanes(cmd)
+        elif action == "fleet_detach":
+            self._handle_fleet_detach()
         else:
             self._log(f"Unknown command: {action}")
 
@@ -703,6 +720,8 @@ class MissionManagerNode(Node):
                 "id": lane.get("id") or f"lane_{int(time.time() * 1000)}",
                 "name": lane.get("name", ""),
                 "points": pts,
+                # One-way: driven only in the order of its points.
+                "oneway": bool(lane.get("oneway", False)),
             })
         self._locations["lanes"] = cleaned
         self._save_locations()
@@ -719,6 +738,72 @@ class MissionManagerNode(Node):
         twist.linear.x = lx * scale
         twist.angular.z = az * scale
         self._cmd_vel_pub.publish(twist)
+
+    def _handle_fleet_heartbeat(self, cmd):
+        f = self._fleet
+        hold = bool(cmd.get("hold", False))
+        by = str(cmd.get("by", ""))
+        if not f["managed"]:
+            self._log(f"Fleet manager {cmd.get('manager', '')} connected; "
+                      "drives now follow fleet traffic control.")
+        elif time.time() - f["beat"] > f["ttl"]:
+            self._log("Fleet manager is back.")
+        if hold and not f["hold"]:
+            self._log(f"Holding for {by or 'another robot'}"
+                      f"{': ' + cmd['reason'] if cmd.get('reason') else ''}.")
+        elif f["hold"] and not hold:
+            self._log("Way is clear; continuing.")
+        try:
+            ttl = max(0.5, min(10.0, float(cmd.get("ttl", 2.0))))
+        except (TypeError, ValueError):
+            ttl = 2.0
+        retreat = cmd.get("retreat")
+        if hold and retreat and cmd.get("retreat_id") != f["retreat_id"]:
+            try:
+                f["retreat"] = [(float(x), float(y)) for x, y in retreat]
+                f["retreat_id"] = cmd.get("retreat_id")
+                into = cmd.get("retreat_into")
+                f["retreat_into"] = ((float(into["x"]), float(into["y"]), float(into.get("yaw", 0.0)))
+                                     if into else None)
+            except (TypeError, ValueError):
+                f["retreat"] = None
+        f.update(managed=True, manager=str(cmd.get("manager", "")), beat=time.time(), ttl=ttl,
+                 hold=hold, by=by, reason=str(cmd.get("reason", "")))
+
+    def _handle_fleet_detach(self):
+        if self._fleet["managed"]:
+            self._log("Left fleet traffic control; driving on this robot's own.")
+        self._fleet.update(managed=False, hold=False, by="", reason="")
+
+    def _fleet_lease_lost(self):
+        f = self._fleet
+        return f["managed"] and time.time() - f["beat"] > f["ttl"]
+
+    def _fleet_held(self):
+        return self._fleet["managed"] and (self._fleet["hold"] or self._fleet_lease_lost())
+
+    def _wait_fleet_clear(self):
+        """Block while fleet traffic holds this robot. False if cancelled."""
+        if not self._fleet_held():
+            return True
+        self._cmd_vel_pub.publish(Twist())
+        if self._fleet_lease_lost():
+            self._log("Fleet manager lost; holding position until it returns "
+                      "(or detach this robot from the fleet).")
+        while self._fleet_held():
+            if self._cancel_requested or self._paused:
+                return False
+            f = self._fleet
+            if f["retreat"] and f["retreat_done"] != f["retreat_id"] and not self._fleet_lease_lost():
+                f["retreat_done"] = f["retreat_id"]
+                self._log(f"Backing off along the lane to let {f['by'] or 'another robot'} pass.")
+                if self._drive_back_off(f["retreat"]) and f["retreat_into"]:
+                    # Refuge: straight into a free slot, or under a rack when empty.
+                    x, y, yaw = f["retreat_into"]
+                    self._approach_site(x, y, yaw, label="into refuge")
+                self._cmd_vel_pub.publish(Twist())
+            time.sleep(0.1)
+        return not (self._cancel_requested or self._paused)
 
     def _handle_set_speed(self, cmd):
         speed = float(cmd.get("speed", 0.4))
@@ -812,7 +897,7 @@ class MissionManagerNode(Node):
         if dock and dock.get("x") is not None:
             self._log("All tasks complete. Returning to dock...")
             self._state = MissionState.RETURNING
-            self._navigate_to(dock["x"], dock["y"], dock.get("yaw", 0.0))
+            self._go_to_site(dock["x"], dock["y"], dock.get("yaw", 0.0), label="dock")
 
         self._state = MissionState.IDLE
         self._log("Mission queue complete. Robot is idle.")
@@ -888,7 +973,7 @@ class MissionManagerNode(Node):
 
                 self._log(f"Navigating to pickup staging for "
                           f"{task.get('from_name', 'rack')}...")
-                if not self._navigate_to(stg_x, stg_y, src_yaw):
+                if not self._approach_site(stg_x, stg_y, src_yaw, label="to pickup staging"):
                     return False
 
             if self._cancel_requested or self._paused:
@@ -949,7 +1034,7 @@ class MissionManagerNode(Node):
 
                 self._log(f"Navigating to drop staging for "
                           f"{task.get('to_name', 'destination')}...")
-                if not self._navigate_to(stg_x, stg_y, dst_yaw):
+                if not self._approach_site(stg_x, stg_y, dst_yaw, label="to drop staging"):
                     return False
 
             if self._cancel_requested or self._paused:
@@ -1003,11 +1088,21 @@ class MissionManagerNode(Node):
         self._current_task_step = "navigating"
         self._state = MissionState.NAVIGATING
         self._log(f"Navigating to {task.get('to_name', 'target')}...")
-        ok = self._navigate_to(dst["x"], dst["y"], dst.get("yaw", 0.0))
-        return ok
+        return self._go_to_site(dst["x"], dst["y"], dst.get("yaw", 0.0), label=task.get("to_name", ""))
 
     def _navigate_to(self, x, y, yaw):
-        """Send a goal to Nav2 and block until completion."""
+        """Send a goal to Nav2 and block until completion.
+
+        A fleet hold cancels the goal and re-sends it once the way is clear.
+        """
+        while True:
+            if not self._wait_fleet_clear():
+                return False
+            result = self._navigate_once(x, y, yaw)
+            if result != "held":
+                return result
+
+    def _navigate_once(self, x, y, yaw):
         # Wait for Nav2 with retries — the nav stack may still be initializing
         for attempt in range(3):
             if self._nav_client.wait_for_server(timeout_sec=self.p_nav_timeout):
@@ -1059,6 +1154,13 @@ class MissionManagerNode(Node):
                 except Exception:
                     pass
                 return False
+            if self._fleet_held():
+                try:
+                    goal_handle.cancel_goal_async()
+                except Exception:
+                    pass
+                self._nav_goal_handle = None
+                return "held"
             time.sleep(0.1)
 
         self._nav_goal_handle = None
@@ -1113,16 +1215,22 @@ class MissionManagerNode(Node):
             points.append((x, y))
             return len(points) - 1
 
+        # (a, b) node pairs of one-way lanes: only a -> b may be driven.
+        self._oneway = set()
         for lane in self._locations.get("lanes", []):
             prev = None
+            oneway = bool(lane.get("oneway", False))
             for pt in lane.get("points", []):
                 idx = find_or_add(float(pt["x"]), float(pt["y"]))
                 if prev is not None and prev != idx:
                     px1, py1 = points[idx]
                     px0, py0 = points[prev]
                     d = math.hypot(px1 - px0, py1 - py0)
-                    edges[idx].append((prev, d))
                     edges[prev].append((idx, d))
+                    if oneway:
+                        self._oneway.add((prev, idx))
+                    else:
+                        edges[idx].append((prev, d))
                 prev = idx
 
         return points, edges
@@ -1179,6 +1287,30 @@ class MissionManagerNode(Node):
         # Approach direction (where the aisle/lane should be relative to the rack)
         approach_dx = -math.cos(target_yaw)
         approach_dy = -math.sin(target_yaw)
+
+        # The site's face: the ray from its centre along the approach
+        # direction meets the lane at the exact entry point (at 90° to the
+        # lane when the face was aimed at it, as the GUI does). The robot
+        # leaves the lane there and drives straight in along that ray.
+        ray = None
+        for lane in self._locations.get("lanes", []):
+            pts = lane.get("points", [])
+            for si in range(len(pts) - 1):
+                ax, ay = float(pts[si]["x"]), float(pts[si]["y"])
+                bx, by = float(pts[si + 1]["x"]), float(pts[si + 1]["y"])
+                ex, ey = bx - ax, by - ay
+                den = approach_dx * ey - approach_dy * ex
+                if abs(den) < 1e-9:
+                    continue
+                t = ((ax - target_x) * ey - (ay - target_y) * ex) / den
+                u = ((ax - target_x) * approach_dy - (ay - target_y) * approach_dx) / den
+                if t > 0.05 and -1e-6 <= u <= 1 + 1e-6 and (ray is None or t < ray[0]):
+                    a_node, b_node = find_node(ax, ay), find_node(bx, by)
+                    if a_node is not None and b_node is not None:
+                        ray = (t, target_x + approach_dx * t, target_y + approach_dy * t,
+                               a_node, b_node, max(0.0, min(1.0, u)))
+        if ray is not None:
+            return ray[1:]
 
         best = None
         best_score = float("inf")
@@ -1253,6 +1385,101 @@ class MissionManagerNode(Node):
         path_idx.reverse()
         return [points[i] for i in path_idx]
 
+    def _lane_mode(self):
+        """Lanes defined: the robot drives on them and nowhere else."""
+        return bool(self._locations.get("lanes"))
+
+    def _nearest_lane_foot(self, x, y):
+        """Closest point on any lane segment: (fx, fy, a_node, b_node, dist) or None."""
+        points, _ = self._build_lane_graph()
+        thresh_sq = self.LANE_MERGE_DIST ** 2
+
+        def find_node(px, py):
+            for i, (qx, qy) in enumerate(points):
+                if (qx - px) ** 2 + (qy - py) ** 2 < thresh_sq:
+                    return i
+            return None
+
+        best = None
+        for lane in self._locations.get("lanes", []):
+            pts = lane.get("points", [])
+            for si in range(len(pts) - 1):
+                ax, ay = float(pts[si]["x"]), float(pts[si]["y"])
+                bx, by = float(pts[si + 1]["x"]), float(pts[si + 1]["y"])
+                fx, fy, _ = self._project_to_segment(x, y, ax, ay, bx, by)
+                d = math.hypot(fx - x, fy - y)
+                if best is None or d < best[4]:
+                    a, b = find_node(ax, ay), find_node(bx, by)
+                    if a is not None and b is not None:
+                        best = (fx, fy, a, b, d)
+        return best
+
+    def _leave_to_lane(self):
+        """Off the lanes (in a rack slot, at the dock): drive straight back
+        out along the robot's own axis to the lane. Never a free Nav2 plan."""
+        self._update_robot_pose()
+        rx, ry, ryaw = self._robot_pose["x"], self._robot_pose["y"], self._robot_pose["yaw"]
+        near = self._nearest_lane_foot(rx, ry)
+        if near is None or near[4] <= 0.3:
+            return True
+        # The lane behind the robot along its axis: the side it came in from.
+        foot = self._find_lane_approach_foot(rx, ry, ryaw)
+        if foot is None:
+            self._log("ERROR: Off the lanes and no lane behind the robot. Drive it onto a lane.")
+            return False
+        fx, fy = foot[0], foot[1]
+        lateral = abs(-(fx - rx) * math.sin(ryaw) + (fy - ry) * math.cos(ryaw))
+        if lateral > 0.35:
+            self._log(f"ERROR: The lane is {lateral:.2f} m off the robot's axis, so it can't "
+                      "back straight onto it. Drive it onto a lane.")
+            return False
+        return self._drive_to_map_point(fx, fy, ryaw, label="back out to the lane")
+
+    def _turn_in_place(self, yaw, tol=0.05, timeout=15.0):
+        """Rotate on the spot to *yaw* (map frame), closed-loop on TF."""
+        dt = 1.0 / self.p_drive_rate
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if self._cancel_requested or self._paused:
+                break
+            pose = self._get_tf_pose("map")
+            if pose is None:
+                time.sleep(dt)
+                continue
+            err = self._wrap_angle(yaw - pose[2])
+            if abs(err) < tol:
+                self._cmd_vel_pub.publish(Twist())
+                return True
+            twist = Twist()
+            twist.angular.z = self._clamp(1.5 * err, -self.p_dock_wz_max, self.p_dock_wz_max)
+            if 0 < abs(twist.angular.z) < 0.12:
+                twist.angular.z = math.copysign(0.12, twist.angular.z)
+            self._cmd_vel_pub.publish(twist)
+            time.sleep(dt)
+        self._cmd_vel_pub.publish(Twist())
+        return False
+
+    def _approach_site(self, x, y, yaw, label=""):
+        """Lane foot → point in front of / at a site: square up on the spot,
+        then straight along its axis (a carried rack never swings round)."""
+        if self._lane_mode():
+            self._update_robot_pose()
+            if abs(self._wrap_angle(yaw - self._robot_pose["yaw"])) > 0.15:
+                if not self._turn_in_place(yaw):
+                    return False
+            return self._drive_to_map_point(x, y, yaw, label=label or "straight in")
+        return self._navigate_to(x, y, yaw)
+
+    def _go_to_site(self, x, y, yaw, label=""):
+        """Drive to a site (dock, navigate goal): lanes, then straight in."""
+        if not self._lane_mode():
+            return self._navigate_to(x, y, yaw)
+        if not self._route_via_lanes(x, y, yaw, label=label):
+            return False
+        if self._cancel_requested or self._paused:
+            return False
+        return self._approach_site(x, y, yaw, label=label)
+
     def _route_via_lanes(self, target_x, target_y, target_yaw, label=""):
         """MANDATORY lane routing with perpendicular dock/undock.
 
@@ -1288,12 +1515,24 @@ class MissionManagerNode(Node):
             return True
         foot_x, foot_y, a_node, b_node, t = foot_info
 
-        # Step 2: Dijkstra from the robot to all reachable lane nodes
+        # Step 2: onto the lane (straight back out of a slot or the dock),
+        # then Dijkstra from where the robot stands on its lane segment, so
+        # it never drives back to a node behind it.
+        if not self._leave_to_lane():
+            return False
         self._update_robot_pose()
         start_xy = (self._robot_pose["x"], self._robot_pose["y"])
-        start_node = self._nearest_lane_node(start_xy[0], start_xy[1], points)
-        if start_node is None:
+        here = self._nearest_lane_foot(start_xy[0], start_xy[1])
+        if here is None:
             return True
+        hx, hy, ha, hb, _ = here
+        start_node = -1  # virtual node: the robot's own spot on the lane
+        edges = dict(edges)
+        ow = getattr(self, "_oneway", set())
+        edges[start_node] = [(n, math.hypot(points[n][0] - hx, points[n][1] - hy))
+                             for n, other in ((ha, hb), (hb, ha)) if (other, n) in ow or (n, other) not in ow]
+        points = list(points) + [(hx, hy)]
+        points_idx = {start_node: len(points) - 1}
 
         import heapq
         dist = {start_node: 0.0}
@@ -1318,8 +1557,9 @@ class MissionManagerNode(Node):
             nx, ny = points[node]
             return dist[node] + math.hypot(nx - foot_x, ny - foot_y)
 
-        a_cost = reach_cost(a_node)
-        b_cost = reach_cost(b_node)
+        # On a one-way segment the foot is only reached from its tail node.
+        a_cost = reach_cost(a_node) if (b_node, a_node) not in ow else float("inf")
+        b_cost = reach_cost(b_node) if (a_node, b_node) not in ow else float("inf")
         if a_cost == float("inf") and b_cost == float("inf"):
             self._log("  Lane routing: graph disconnected from start.")
             return True
@@ -1337,8 +1577,15 @@ class MissionManagerNode(Node):
                 node_path.append(prev[node_path[-1]])
             node_path.reverse()
 
+        # Same segment as the foot: straight along it, no detour via a node
+        # (on a one-way segment only when the foot lies ahead).
+        if ha in (a_node, b_node) and hb in (a_node, b_node):
+            head = hb if (ha, hb) in ow else ha if (hb, ha) in ow else None
+            if head is None or (math.hypot(points[head][0] - foot_x, points[head][1] - foot_y)
+                                < math.hypot(points[head][0] - hx, points[head][1] - hy)):
+                node_path = [start_node]
         # Build the actual waypoints: lane nodes + the perpendicular foot
-        waypoints = [points[i] for i in node_path]
+        waypoints = [points[points_idx.get(i, i)] for i in node_path]
         # If the foot coincides with the last node (foot is at an endpoint
         # of the segment), skip the redundant final hop.
         last_x, last_y = waypoints[-1]
@@ -1369,8 +1616,9 @@ class MissionManagerNode(Node):
         if self.p_lane_smooth and len(waypoints) >= 2:
             result = self._follow_smoothed(waypoints)
             if result is True:
+                # Square up at the lane foot for the straight move into the site.
                 xn, yn = waypoints[-1]
-                return self._navigate_to(xn, yn, final_yaw)
+                return self._approach_site(xn, yn, final_yaw, label="square up at the lane")
             if result is False:
                 return False
             self._update_robot_pose()
@@ -1420,6 +1668,84 @@ class MissionManagerNode(Node):
                 return False
 
         pts = self.smooth_polyline(waypoints, self.p_lane_radius, self.p_lane_step)
+        length = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+                     for i in range(1, len(pts)))
+        self._log(f"  Following lane curve: {length:.1f} m, corners rounded at "
+                  f"{self.p_lane_radius:.2f} m.")
+        while True:
+            if not self._wait_fleet_clear():
+                return False
+            result = self._send_follow(pts)
+            if result != "held":
+                return result
+            # Held by fleet traffic: resume from the closest point ahead.
+            self._update_robot_pose()
+            rx, ry = self._robot_pose["x"], self._robot_pose["y"]
+            k = min(range(len(pts)), key=lambda i: math.hypot(pts[i][0] - rx, pts[i][1] - ry))
+            pts = pts[k:]
+            if len(pts) < 2:
+                return True
+
+    def _drive_back_off(self, pts):
+        """A straight back-off (up a spur) is one closed-loop straight drive,
+        forward or reverse along the robot's own axis; a lane back-off is a
+        reversed FollowPath along the lane."""
+        (x0, y0), (x1, y1) = pts[0], pts[-1]
+        L = math.hypot(x1 - x0, y1 - y0)
+        straight = L > 1e-3 and all(
+            abs(-(x - x0) * (y1 - y0) / L + (y - y0) * (x1 - x0) / L) < 0.05 for x, y in pts)
+        if straight:
+            self._update_robot_pose()
+            return self._drive_to_map_point(x1, y1, self._robot_pose["yaw"], label="back off")
+        return self._follow_reverse(pts)
+
+    def _follow_reverse(self, pts):
+        """Back along a lane path (fleet back-off): FollowPath with every pose
+        facing against the direction of travel, so the controller reverses
+        (MPPI vx_min < 0) instead of turning round on the lane."""
+        if len(pts) < 2 or not self._follow_client.wait_for_server(timeout_sec=2.0):
+            return False
+        pts = self.smooth_polyline(pts, self.p_lane_radius, self.p_lane_step)
+        path = Path()
+        path.header.frame_id = "map"
+        path.header.stamp = self.get_clock().now().to_msg()
+        for i, (x, y) in enumerate(pts):
+            a, b = (pts[i], pts[i + 1]) if i + 1 < len(pts) else (pts[i - 1], pts[i])
+            yaw = math.atan2(b[1] - a[1], b[0] - a[0]) + math.pi
+            ps = PoseStamped()
+            ps.header = path.header
+            ps.pose.position.x = float(x)
+            ps.pose.position.y = float(y)
+            ps.pose.orientation.z = math.sin(yaw / 2.0)
+            ps.pose.orientation.w = math.cos(yaw / 2.0)
+            path.poses.append(ps)
+        goal = FollowPath.Goal()
+        goal.path = path
+        goal.controller_id = "FollowPath"
+        if hasattr(goal, "goal_checker_id"):
+            goal.goal_checker_id = "general_goal_checker"
+        future = self._follow_client.send_goal_async(goal)
+        t0 = time.time()
+        while not future.done():
+            if time.time() - t0 > self.p_nav_timeout:
+                return False
+            time.sleep(self.p_nav_poll)
+        handle = future.result()
+        if handle is None or not handle.accepted:
+            self._log("  Back-off path rejected by the controller.")
+            return False
+        result = handle.get_result_async()
+        t0 = time.time()
+        while not result.done():
+            if self._cancel_requested or self._paused or self._fleet_lease_lost() or time.time() - t0 > 60:
+                handle.cancel_goal_async()
+                return False
+            time.sleep(0.1)
+        return result.result().status == 4
+
+    def _send_follow(self, pts):
+        """One FollowPath goal along pts. True / False / None as
+        _follow_smoothed, or "held" when fleet traffic stopped it."""
         path = Path()
         path.header.frame_id = "map"
         path.header.stamp = self.get_clock().now().to_msg()
@@ -1439,10 +1765,6 @@ class MissionManagerNode(Node):
         goal.controller_id = "FollowPath"
         if hasattr(goal, "goal_checker_id"):
             goal.goal_checker_id = "general_goal_checker"
-        length = sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
-                     for i in range(1, len(pts)))
-        self._log(f"  Following lane curve: {length:.1f} m, corners rounded at "
-                  f"{self.p_lane_radius:.2f} m.")
 
         future = self._follow_client.send_goal_async(goal)
         t0 = time.time()
@@ -1466,6 +1788,13 @@ class MissionManagerNode(Node):
                 except Exception:
                     pass
                 return False
+            if self._fleet_held():
+                try:
+                    handle.cancel_goal_async()
+                except Exception:
+                    pass
+                self._nav_goal_handle = None
+                return "held"
             if time.time() - t0 > self.p_lane_timeout:
                 handle.cancel_goal_async()
                 self._log("  Lane curve timed out.")
@@ -2212,6 +2541,14 @@ class MissionManagerNode(Node):
             "speed": self._speed_multiplier,
             "carrying": self._carrying,
             "lane_corner_radius": self.p_lane_radius if self.p_lane_smooth else 0.0,
+            "fleet": {
+                "managed": self._fleet["managed"],
+                "manager": self._fleet["manager"],
+                "held": self._fleet_held(),
+                "by": self._fleet["by"],
+                "reason": ("Fleet manager lost" if self._fleet_lease_lost()
+                           else self._fleet["reason"]),
+            },
         }
         msg = String()
         msg.data = json.dumps(state_data)

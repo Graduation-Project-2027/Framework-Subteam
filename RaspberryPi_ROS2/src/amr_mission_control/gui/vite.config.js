@@ -10,6 +10,7 @@ export default defineConfig({
           react: ["react", "react-dom"],
           ui: ["radix-ui", "motion/react", "lucide-react"],
           ros: ["roslib"],
+          three: ["three", "@react-three/fiber", "@react-three/drei"],
         },
       },
     },

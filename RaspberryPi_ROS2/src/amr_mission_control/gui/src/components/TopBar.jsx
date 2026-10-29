@@ -1,8 +1,78 @@
 import { useState, memo } from "react";
-import { Play, Pause, Square, House, OctagonX, Server, ChevronRight, FlaskConical, X, ShieldCheck } from "lucide-react";
-import { Button, Tip, ConfirmDialog, Sun } from "./ui";
+import { Play, Pause, Square, House, OctagonX, Server, ChevronRight, ChevronDown, FlaskConical, X, ShieldCheck, Boxes, Bot, Monitor } from "lucide-react";
+import { Button, Tip, ConfirmDialog, Sun, Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel, MenuSeparator } from "./ui";
 import { stateMeta } from "../lib/mission";
 import { cx } from "../lib/cx";
+
+/** Fleet (the laptop's view of every robot) | one robot's console, with a
+ *  picker for which robot when there is a fleet. */
+export function WorkspaceNav({ value, onChange, consoleLabel = "Robot", robots, currentHost, onPickRobot, preview }) {
+  if (!onChange) return null;
+  const picker = onPickRobot && robots?.length > 0;
+  return (
+    <nav className="wsnav" aria-label="Workspace">
+      <button type="button" className="wsnav__item" aria-current={value === "fleet" ? "page" : undefined} onClick={() => onChange("fleet")}>
+        <Boxes size={15} strokeWidth={1.75} aria-hidden="true" />
+        <span className="wsnav__label">Fleet</span>
+      </button>
+      {picker ? (
+        <Menu>
+          <MenuTrigger asChild>
+            <button type="button" className="wsnav__item" aria-current={value === "robot" ? "page" : undefined} aria-label={`Robot console: ${consoleLabel}. Choose a robot`}>
+              <Bot size={15} strokeWidth={1.75} aria-hidden="true" />
+              <span className="wsnav__label">{consoleLabel}</span>
+              <ChevronDown size={13} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </MenuTrigger>
+          <MenuContent>
+            <MenuLabel>Open the console of</MenuLabel>
+            {robots.map((r) => (
+              <MenuItem key={r.key} icon={Bot} onSelect={() => onPickRobot(r)}
+                hint={`${r.linked ? (r.hold ? "holding" : r.mission?.state?.toLowerCase() || "linked") : "not linked"} · ${r.host}`}>
+                {r.label}{r.host === currentHost && value === "robot" ? " (open)" : ""}
+              </MenuItem>
+            ))}
+            {!preview && (
+              <>
+                <MenuSeparator />
+                <MenuItem icon={Monitor} onSelect={() => onPickRobot(null)} hint="the robot stack on this computer">This computer</MenuItem>
+              </>
+            )}
+          </MenuContent>
+        </Menu>
+      ) : (
+        <button type="button" className="wsnav__item" aria-current={value === "robot" ? "page" : undefined} onClick={() => onChange("robot")}>
+          <Bot size={15} strokeWidth={1.75} aria-hidden="true" />
+          <span className="wsnav__label">{consoleLabel}</span>
+        </button>
+      )}
+    </nav>
+  );
+}
+
+/** How the open robot stands with the fleet: the fleet's map, same copy, layout. */
+function FleetChip({ link, onOpen }) {
+  if (!link) return null;
+  if (!link.inFleet) {
+    return <span className="fleetchip fleetchip--off" title="This robot is not in the fleet">Not in the fleet</span>;
+  }
+  const mapOk = link.sameCopy && (!link.running || link.running === link.map);
+  const ok = mapOk && link.layout === "synced";
+  const text = !link.map ? "Fleet: no map"
+    : !link.sameCopy ? `${link.map} differs from the fleet copy`
+      : link.running && link.running !== link.map ? `Runs ${link.running}, fleet uses ${link.map}`
+        : link.layout === "sending" ? `${link.map} · layout syncing`
+          : `${link.map} · fleet layout rev ${link.rev}`;
+  return (
+    <Tip label={ok ? "Same map copy as the fleet library and the fleet layout. Open the fleet." : "Open the fleet to sync this robot."}>
+      <button type="button" className={`fleetchip ${ok ? "fleetchip--ok" : "fleetchip--warn"}`} onClick={onOpen}>
+        <Boxes size={13} strokeWidth={1.75} aria-hidden="true" />
+        <span className={`dot dot--${ok ? "ok" : "caution"}`} />
+        <span className="hide-sm">{text}</span>
+      </button>
+    </Tip>
+  );
+}
 
 function StackButton({ stack, onOpen }) {
   const s = stack.status;
@@ -49,7 +119,7 @@ function LinkStatus({ mode, status, url, onExitPreview }) {
   );
 }
 
-function TopBar({ missionState, mode, status, online, url, sendCommand, onExitPreview, compact, stack, stackMode, onOpenSystem }) {
+function TopBar({ missionState, mode, status, online, url, sendCommand, onExitPreview, compact, stack, stackMode, onOpenSystem, workspace, onWorkspace, consoleLabel, robots, currentHost, onPickRobot, fleetLink }) {
   const [releaseOpen, setReleaseOpen] = useState(false);
   const state = missionState.state;
   const meta = stateMeta(state);
@@ -73,10 +143,13 @@ function TopBar({ missionState, mode, status, online, url, sendCommand, onExitPr
         <img src="/ejust-emblem.png" alt="E-JUST" width="22" height="28" />
         <h1 className="wordmark" translate="no">LEVERAGE<span className="sr-only"> mission control</span></h1>
       </div>
+      <WorkspaceNav value={workspace} onChange={onWorkspace} consoleLabel={consoleLabel}
+        robots={robots} currentHost={currentHost} onPickRobot={onPickRobot} preview={mode === "preview"} />
 
       <div className="topbar__status">
         <LinkStatus mode={mode} status={status} url={url} onExitPreview={onExitPreview} />
         <StackButton stack={stack} onOpen={onOpenSystem} />
+        <FleetChip link={fleetLink} onOpen={() => onWorkspace?.("fleet")} />
       </div>
 
       <div className={cx("topbar__state", `tone--${mapping && usable ? "live" : meta.tone}`)} aria-live="polite">

@@ -11,6 +11,7 @@ motor-controller firmware and the Raspberry Pi ROS 2 robot framework with its we
 | [FEATURES.md](FEATURES.md) | Every feature, large and small, grouped for presentation |
 | [USER_GUIDE.md](USER_GUIDE.md) | Step-by-step: setup, mapping, maps, lanes, missions, safety, troubleshooting |
 | [RaspberryPi_ROS2/README.md](RaspberryPi_ROS2/README.md) | Robot software: packages, launch files, architecture |
+| [RaspberryPi_ROS2/docs/fleet.md](RaspberryPi_ROS2/docs/fleet.md) | Fleet management: several robots from one laptop, traffic rules, Pi setup over SSH |
 | [Hoverboard_Firmware/README.md](Hoverboard_Firmware/README.md) | Motor controller firmware and CAN protocol |
 
 ## Mission control at a glance
@@ -32,6 +33,19 @@ then open <http://localhost:5173/?preview>).
 | Launch the stack, RViz and logs | Costmaps, lidars and dynamic obstacles |
 |---|---|
 | ![System sheet](RaspberryPi_ROS2/images/gui-system-sheet.png) | ![Dynamic obstacle](RaspberryPi_ROS2/images/gui-goto-point-dynamic-obstacle.png) |
+
+### Fleet
+
+A **Fleet** workspace runs several robots from one laptop (`fleet_server.py`): robots are found on
+the network automatically, shown on a 3D floor, kept apart by traffic control (path reservations,
+holds, backing off along the lane, refuges), and share one map library and one lane layout. A new
+Raspberry Pi is set up from the GUI over SSH: hostname, ROS 2 Jazzy, workspace upload and build,
+Robot ID and a launcher that starts at boot. Robots drive on lanes only and enter every rack from
+its face, straight in at 90° to the lane. Preview simulates the whole fleet.
+
+| Four robots on a one-way loop | Lanes as a schematic, racks with their faces |
+|---|---|
+| ![Fleet 3D](RaspberryPi_ROS2/images/gui-fleet-3d.jpg) | ![Fleet layout](RaspberryPi_ROS2/images/gui-fleet-layout.jpg) |
 
 ## Projects
 

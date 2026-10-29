@@ -31,6 +31,14 @@ Map library (maps live in src/amr_navigation/maps, or $AMR_MAPS_DIR):
     POST /api/maps/NAME/revert      undo all image edits
     POST /api/maps/NAME/delete      move to ~/.ros/amr_map_trash
     POST /api/maps/restore?id=TRASH_ID
+    GET  /api/maps/NAME/bundle       zip of the map (fleet map sync)
+    PUT  /api/maps/NAME/bundle[?overwrite=1]
+
+Fleet (fleet_server.py on the laptop finds and manages robots):
+    GET  /api/robot                  identity + settings of this robot
+    POST /api/robot                  JSON body: change settings
+    A UDP beacon is broadcast every second on port 8089 ($AMR_DISCOVERY_PORT)
+    so the laptop finds this robot without typing addresses.
 """
 
 import json
@@ -39,12 +47,17 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
+import sys
 import threading
 import time
+import uuid
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
+
+import map_bundle
 
 def _env(name, default):
     # The project was renamed AGV -> AMR; still honour the old variable names.
@@ -55,6 +68,9 @@ PORT = int(_env("LAUNCHER_PORT", "8088"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAPS_DIR = _env("MAPS_DIR", os.path.join(os.path.dirname(HERE), "amr_navigation", "maps"))
 STATE_FILE = os.path.expanduser("~/.ros/amr_launcher.json")
+ROBOT_FILE = os.path.expanduser("~/.ros/amr_robot.json")
+DISCOVERY_PORT = int(_env("DISCOVERY_PORT", "8089"))
+ROSBRIDGE_PORT = 9090
 TRASH_DIR = os.path.expanduser("~/.ros/amr_map_trash")
 LEGACY_FILES = {
     STATE_FILE: os.path.expanduser("~/.ros/agv_launcher.json"),
@@ -131,6 +147,10 @@ def _pump(popen, source):
 
 def _spawn(cmd, source):
     env = dict(os.environ, PYTHONUNBUFFERED="1", RCUTILS_COLORIZED_OUTPUT="0")
+    domain = _robot().get("domain_id")
+    if domain is not None:
+        # One domain per robot keeps robots' ROS graphs apart on shared Wi-Fi.
+        env["ROS_DOMAIN_ID"] = str(domain)
     popen = subprocess.Popen(
         ["bash", "-c", cmd], preexec_fn=os.setsid, env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1)
@@ -278,6 +298,132 @@ def _status():
         }
 
 
+# ── Robot identity and settings (fleet) ────────────────────────────────
+# Identity lives in ~/.ros, outside the workspace, so every robot can run an
+# identical copy of the repo. A robot without a Robot ID is "unconfigured":
+# the fleet lists it under New robots until first-time setup gives it one.
+ROBOT_DEFAULTS = {
+    "id": None,            # Robot ID, e.g. AMR-03; set at first-time setup
+    "name": "",            # optional friendly name
+    "domain_id": None,     # ROS_DOMAIN_ID for the stack; None = inherit
+    "max_speed": 0.4,      # m/s cap applied when the fleet manager connects
+    "priority": 0,         # traffic tie-break: higher goes first
+    "notes": "",
+}
+ROBOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,15}$")
+_robot_lock = threading.Lock()
+
+
+def _machine_key():
+    """Stable per-machine key, so the fleet keeps a robot across renames."""
+    for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+        try:
+            with open(path) as f:
+                key = f.read().strip()
+            if key:
+                return key[:16]
+        except OSError:
+            pass
+    return f"{uuid.getnode():012x}"
+
+
+def _read_robot_file():
+    try:
+        with open(ROBOT_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_robot_file(data):
+    os.makedirs(os.path.dirname(ROBOT_FILE), exist_ok=True)
+    with open(ROBOT_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _robot():
+    with _robot_lock:
+        data = _read_robot_file()
+    out = {**ROBOT_DEFAULTS, **data}
+    out["configured"] = bool(out["id"])
+    out["machine"] = _machine_key()
+    return out
+
+
+def _check_robot_id(rid):
+    rid = str(rid or "").strip()
+    if not ROBOT_ID_RE.match(rid):
+        raise ApiError(400, "Robot ID: 1–16 letters, digits or '-' (e.g. AMR-03).")
+    return rid
+
+
+def _update_robot(body):
+    cur = _robot()
+    upd = {}
+    try:
+        if "id" in body:
+            upd["id"] = _check_robot_id(body["id"])
+        if "name" in body:
+            name = str(body["name"]).strip()
+            if len(name) > 24:
+                raise ApiError(400, "Name must be at most 24 characters.")
+            upd["name"] = name
+        if "domain_id" in body:
+            d = body["domain_id"]
+            if d not in (None, ""):
+                d = int(d)
+                if not 0 <= d <= 101:
+                    raise ApiError(400, "ROS domain must be 0–101.")
+            upd["domain_id"] = None if d in (None, "") else d
+        if "max_speed" in body:
+            v = float(body["max_speed"])
+            if not 0.1 <= v <= 1.0:
+                raise ApiError(400, "Max speed must be 0.1–1.0 m/s.")
+            upd["max_speed"] = round(v, 2)
+        if "priority" in body:
+            pr = int(body["priority"])
+            if not -9 <= pr <= 9:
+                raise ApiError(400, "Priority must be -9 to 9.")
+            upd["priority"] = pr
+        if "notes" in body:
+            upd["notes"] = str(body["notes"])[:400]
+    except (TypeError, ValueError):
+        raise ApiError(400, "Settings must be numbers where a number is expected.")
+    with _robot_lock:
+        data = _read_robot_file()
+        data.update(upd)
+        _write_robot_file(data)
+    if upd.get("id") and upd["id"] != cur["id"]:
+        _log(f"Robot ID set to {upd['id']}." if not cur["id"] else f"Robot ID changed {cur['id']} -> {upd['id']}.")
+    if "domain_id" in upd and upd["domain_id"] != cur["domain_id"] and _is_running():
+        _log("ROS domain changed; it applies the next time the stack starts.")
+    return _robot_public()
+
+
+def _robot_public():
+    r = _robot()
+    with _lock:
+        running = _is_running()
+        stack = {"running": running, "mode": _proc["mode"] if running else None,
+                 "map": _proc["map"] if running else None,
+                 "target": _proc["target"] if running else None}
+    return {**r, "host": socket.gethostname(), "launcher": PORT, "rosbridge": ROSBRIDGE_PORT,
+            "stack": stack, "default_map": _default_map(), "version": 3}
+
+
+def _beacon():
+    """Announce this robot on the LAN once a second (fleet discovery)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    while True:
+        try:
+            msg = json.dumps({"leverage": "robot", **_robot_public()}).encode()
+            sock.sendto(msg, ("<broadcast>", DISCOVERY_PORT))
+        except Exception:
+            pass  # no network yet; keep trying
+        time.sleep(1.0)
+
+
 # ── Map library ────────────────────────────────────────────────────────
 def _check_name(name):
     if not name or not NAME_RE.match(name):
@@ -366,6 +512,7 @@ def _map_info(name):
         "has_posegraph": os.path.exists(_map_path(name, ".posegraph")) and os.path.exists(_map_path(name, ".data")),
         "edited": os.path.exists(_map_path(name, ".orig.pgm")),
         "modified": max(stamps) if stamps else None,
+        "fingerprint": map_bundle.fingerprint(MAPS_DIR, name),
     }
 
 
@@ -441,8 +588,34 @@ def _put_pgm(name, body):
     with open(tmp, "wb") as f:
         f.write(body)
     os.replace(tmp, img)
-    _log(f"Map '{name}' image edited.")
-    return _map_info(name)
+    info = _map_info(name)
+    if _is_running() and _proc["map"] == name:
+        info["reloaded"] = _reload_static_map(name)
+    else:
+        _log(f"Map '{name}' image edited.")
+        info["reloaded"] = False
+    return info
+
+
+def _reload_static_map(name):
+    """The stack navigates on this map: have map_server_static load the edited
+    image now (nav2 LoadMap), so the planner's /map_static updates live. The
+    pose graph is untouched, so localization carries on."""
+    yaml_path = _map_path(name, ".yaml")
+    cmd = ("ros2 service call /map_server_static/load_map nav2_msgs/srv/LoadMap "
+           f"\"{{map_url: '{yaml_path}'}}\"")
+    env = dict(os.environ)
+    domain = _robot().get("domain_id")
+    if domain is not None:
+        env["ROS_DOMAIN_ID"] = str(domain)
+    try:
+        out = subprocess.run(["bash", "-c", cmd], env=env, capture_output=True, text=True, timeout=20)
+        ok = out.returncode == 0 and "result=0" in out.stdout.replace(" ", "")
+    except (OSError, subprocess.TimeoutExpired):
+        ok = False
+    _log(f"Map '{name}' edited and reloaded live." if ok
+         else f"Map '{name}' edited; the live reload failed, so it applies when navigation restarts.")
+    return ok
 
 
 def _revert(name):
@@ -569,6 +742,10 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/stop":
             msg = _stop()
             return self._json(200, {"ok": True, "message": msg, **_status()})
+        if method == "GET" and path == "/api/robot":
+            return self._json(200, _robot_public())
+        if method == "POST" and path == "/api/robot":
+            return self._json(200, {"ok": True, **_update_robot(self._body_json())})
         if method == "POST" and path == "/api/rviz":
             if q.get("on") in ("1", "true"):
                 _start_rviz()
@@ -580,6 +757,15 @@ class Handler(BaseHTTPRequestHandler):
             with _maps_lock:
                 return self._maps(method, parts[2:], q)
         raise ApiError(404, "Not found.")
+
+    def _body_json(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length > 64 * 1024:
+            raise ApiError(413, "Body too large.")
+        try:
+            return json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError:
+            raise ApiError(400, "Expected a JSON body.")
 
     def _maps(self, method, rest, q):
         if method == "GET" and not rest:
@@ -603,6 +789,30 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return None
+        if action == "bundle" and method == "GET":
+            _require_map(name)
+            body = map_bundle.pack(MAPS_DIR, name)
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return None
+        if action == "bundle" and method == "PUT":
+            _check_name(name)
+            _require_unused(name, "replace")
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > map_bundle.MAX_BUNDLE:
+                raise ApiError(413, "Bundle too large.")
+            try:
+                fp = map_bundle.unpack(MAPS_DIR, name, self.rfile.read(length), q.get("overwrite") == "1")
+            except FileExistsError as e:
+                raise ApiError(409, str(e))
+            except ValueError as e:
+                raise ApiError(400, str(e))
+            _log(f"Map '{name}' received from the fleet ({fp}).")
+            return self._json(200, {"ok": True, "map": _map_info(name)})
         if action == "pgm" and method == "PUT":
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > MAX_UPLOAD:
@@ -653,10 +863,23 @@ def _migrate_legacy():
 
 
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--set-id":
+        data = _read_robot_file()
+        data["id"] = _check_robot_id(sys.argv[2])
+        _write_robot_file(data)
+        print(f"Robot ID set to {data['id']} ({ROBOT_FILE}).")
+        return
     _migrate_legacy()
     os.makedirs(MAPS_DIR, exist_ok=True)
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    threading.Thread(target=_beacon, daemon=True).start()
+    r = _robot()
     _log(f"AMR launcher on http://0.0.0.0:{PORT} (maps: {MAPS_DIR})")
+    if r["configured"]:
+        _log(f"Robot {r['id']} announcing on UDP {DISCOVERY_PORT}.")
+    else:
+        _log(f"First-time setup: no Robot ID yet. Set one from the fleet screen, or run "
+             f"'launcher_server.py --set-id AMR-03'. Announcing as new robot on UDP {DISCOVERY_PORT}.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

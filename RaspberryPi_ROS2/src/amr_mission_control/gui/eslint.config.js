@@ -36,4 +36,9 @@ export default [
       ],
     },
   },
+  {
+    // React Three Fiber: JSX elements carry three.js props (intensity, castShadow, …).
+    files: ['src/components/fleet/FleetScene.jsx'],
+    rules: { 'react/no-unknown-property': 'off' },
+  },
 ]

@@ -67,6 +67,10 @@ map ──(slam_toolbox)──> odom ──(EKF)──> base_footprint ──> b
 | `/mission_control/command` | `std_msgs/String` (JSON) | GUI → mission manager | see [mission_control.md](mission_control.md#gui-commands) |
 | `/mission_control/state` | `std_msgs/String` (JSON) | mission manager → GUI | 5 Hz |
 | `/mission_control/feedback` | `std_msgs/String` | mission manager → GUI | log lines |
+| `/fleet/peers` | `sensor_msgs/PointCloud2` | fleet manager → robot (rosbridge) | other robots' footprints in this robot's `base_footprint`, plus far clearing points; marked by `fleet_layer` in both costmaps |
+
+The state JSON carries a `fleet` object (`managed`, `held`, `by`, `reason`) while a fleet manager
+controls the robot. Lanes may carry `"oneway": true` (driven only in point order).
 
 The GUI talks to ROS through `rosbridge_websocket` on port 9090; the launcher service listens on
 port 8088 and the GUI dev server on 5173. Besides the mission topics, the GUI subscribes (with CBOR,
@@ -86,6 +90,23 @@ only while the matching layer is on) to `/tf`, `/tf_static`, `/map`, `/map_stati
 | `GET`/`PUT /api/maps/NAME/pgm` | read / replace the map image (first edit keeps `NAME.orig.pgm`) |
 | `POST /api/maps/save?name=` | save the running SLAM session (pose graph + image) |
 | `POST /api/maps/NAME/rename\|duplicate?to=`, `/default`, `/revert`, `/delete`; `POST /api/maps/restore?id=` | library management (delete moves to `~/.ros/amr_map_trash`) |
+| `GET`/`PUT /api/maps/NAME/bundle[?overwrite=1]` | the whole map (yaml, image, pose graph) as a zip, for fleet map sync |
+| `GET`/`POST /api/robot` | identity and settings (Robot ID, name, ROS domain, speed, priority, notes; `~/.ros/amr_robot.json`) |
+
+Editing the image of the map the stack navigates on (`PUT .../pgm`) reloads it live through
+`/map_server_static/load_map`. The launcher also broadcasts a UDP beacon on port 8089 once a second.
+
+### Fleet manager HTTP API (`fleet_server.py`, port 8090, laptop)
+
+| Method and path | Effect |
+|---|---|
+| `GET /api/fleet/state` | robots, traffic (conflicts, holds), warnings, events, layout revision |
+| `POST /api/fleet/robots/add?host=`, `/robots/KEY/adopt\|release\|forget` | add robots by address, add to / remove from the fleet |
+| `POST /api/fleet/robots/KEY/settings\|command\|launch\|stop\|deploy` | settings, mission commands, start/stop the stack, deploy code over SSH |
+| `POST /api/fleet/command`, `POST /api/fleet/tasks` | a command for every robot; dispatch a task to the best free robot |
+| `GET`/`PUT /api/fleet/layout`, `POST /api/fleet/layout/import?robot=` | the shared lanes, racks and zones |
+| `GET /api/fleet/maps`, `POST /maps/pull\|push`, `PUT /maps/NAME/pgm`, `POST /maps/NAME/delete` | map library, sync and live edits |
+| `POST /api/fleet/provision/connect\|run`, `GET /api/fleet/jobs/ID` | set up a Pi over SSH; follow a setup/deploy job |
 
 ## Services
 

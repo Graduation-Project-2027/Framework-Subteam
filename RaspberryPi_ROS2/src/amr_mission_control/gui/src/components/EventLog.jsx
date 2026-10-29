@@ -18,7 +18,7 @@ const clean = (msg = "") => msg.replace(/\s*\u26A0\uFE0F?\s*/g, " ").trim();
 const TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 const time = (ts) => (ts ? TIME.format(new Date(ts * 1000)) : "--:--:--");
 
-function EventLog({ entries, collapsible = true, defaultOpen = true }) {
+function EventLog({ entries, collapsible = true, defaultOpen = true, title = "Event log", empty = "Mission events appear here as they happen." }) {
   const [open, setOpen] = useState(defaultOpen);
   const [clearedAt, setClearedAt] = useState(0);
   const scroller = useRef(null);
@@ -37,7 +37,7 @@ function EventLog({ entries, collapsible = true, defaultOpen = true }) {
   };
 
   return (
-    <section className={cx("log", open && "is-open")} aria-label="Event log">
+    <section className={cx("log", open && "is-open")} aria-label={title}>
       <header className="log__head">
         <button
           type="button"
@@ -46,7 +46,7 @@ function EventLog({ entries, collapsible = true, defaultOpen = true }) {
           onClick={() => collapsible && setOpen((o) => !o)}
           disabled={!collapsible}
         >
-          <h2>Event log</h2>
+          <h2>{title}</h2>
           <span className="count num">{shown.length}</span>
           {!open && lastErr && <span className="log__peek"><CircleAlert size={14} strokeWidth={2} aria-hidden="true" />{clean(lastErr.message)}</span>}
           {collapsible && <ChevronDown className="log__chev" size={16} strokeWidth={1.75} aria-hidden="true" />}
@@ -56,7 +56,7 @@ function EventLog({ entries, collapsible = true, defaultOpen = true }) {
       {open && (
         <div className="log__body" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-relevant="additions">
           {shown.length === 0 ? (
-            <p className="empty empty--row">Mission events appear here as they happen.</p>
+            <p className="empty empty--row">{empty}</p>
           ) : (
             <ol>
               {shown.map((e, i) => {
