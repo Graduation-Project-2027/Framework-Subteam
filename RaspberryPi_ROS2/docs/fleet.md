@@ -81,6 +81,10 @@ Preview, `gui/src/lib/traffic.js`).
 
 - **Reservations.** Each driving robot claims the next few metres of its Nav2 path (`speed × 5 s`,
   1.2–4 m). Claims closer than both robots' radii plus 0.15 m conflict.
+- **Rack bays.** Between a site and its entry point a robot drives straight and never turns, so
+  there it counts as the square it is (rack included), not the circle it sweeps when turning.
+  Robots in neighbouring slots (racks 1.16 m apart, carrying racks 0.21 m apart) don't conflict;
+  a robot about to turn out onto the lane still does.
 - **Who goes first.** A robot standing in the other's path goes first (a leader before its
   follower, a robot waiting on a lane before the one that must drive along it). Otherwise the
   traffic priority setting, then a robot carrying a rack, then whoever started driving first.
@@ -92,11 +96,15 @@ Preview, `gui/src/lib/traffic.js`).
   along the lane to the nearest spot clear of the other's whole route and waits there; a robot in
   a site's spur backs up its spur instead. If the lane can't clear it, it takes a **refuge**: an
   empty robot drives in under an occupied rack, a carrying robot only into a free location; sites
-  in another robot's task are never used.
+  in another robot's task are never used. A robot already at the end of its spur has no back-off;
+  a back-off after which neither robot moves is dropped and the deadlock breaker decides instead.
 - **Loops and deadlocks.** A circle of holds (A waits for B, B for C, C for A) gives one robot
   right of way: the highest-ranked whose way is clear of every robot's body; if it doesn't move
-  within 4 s another is tried. Two robots that still block each other are reported for the
-  operator to drive one aside; a robot stuck behind a parked one gets a **Dock** button.
+  within 4 s another is tried. Right of way that isn't used passes on: a robot that stands still
+  for 4 s (blocked by the other, or unheld and stopped by anything else its costmap sees) lets
+  the other go, if the other's way is clear of it. Two robots that still block each other are
+  reported for the operator, and right of way keeps alternating between them so neither
+  settles; a robot stuck behind a parked one gets a **Dock** button.
 - **Awareness.** Each robot gets the others' footprints on `/fleet/peers` (PointCloud2 in its own
   `base_footprint` frame) and marks them in both costmaps (`fleet_layer` in
   `amr_navigation/config/navigation.yaml`), so it plans around robots its lidar can't see yet.
@@ -156,7 +164,7 @@ shows every node as a handle: drag to move, drop on another node to link them, D
 ## Status
 
 Everything above runs in the browser Preview and the laptop/robot code paths are unit-tested
-(traffic: 15 scenarios; map sync and editing against a local launcher). Not yet run on the real
+(traffic: 19 scenarios, plus a 4-robot Preview soak of 40 simulated hours; map sync and editing against a local launcher). Not yet run on the real
 robots: Nav2 reversing along a lane for a back-off (MPPI `vx_min` is -0.3), the in-place turn and
 straight moves at lane feet, `fleet_layer` with real peers, the rosbridge link from the laptop, the
 SSH setup on a real Pi, and an empty robot fitting under a rack as a refuge.

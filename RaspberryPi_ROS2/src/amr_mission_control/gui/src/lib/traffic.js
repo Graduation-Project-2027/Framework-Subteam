@@ -37,6 +37,7 @@ export const ROBOT_R = Math.hypot(0.35, 0.32);
 export const CARRY_R = Math.hypot(0.525, 0.525);
 
 import { buildGraph } from "./lanes";
+import { RACK_SIDE } from "./geometry";
 
 const TRAVEL_STEPS = new Set(["navigating", "navigating_to_rack", "navigating_to_dest", ""]);
 const TRAVEL_STATES = new Set(["RUNNING", "NAVIGATING", "RETURNING"]);
@@ -70,10 +71,66 @@ export function claimOf(pose, plan, m) {
   return pts;
 }
 
-export function gap(a, b) {
+/**
+ * Closest distance between two point sets, as robot centres: compared with
+ * ra + rb + CLEARANCE. With `bay` (see bayIndex) and the two bounding radii,
+ * a robot in a rack bay counts as the square it is there, not its circle.
+ */
+export function gap(a, b, bay, ra = 0, rb = 0) {
+  if (!bay) {
+    let g = Infinity;
+    for (const p of a) for (const q of b) g = Math.min(g, Math.hypot(p[0] - q[0], p[1] - q[1]));
+    return g;
+  }
+  const ba = a.map(bay), bb = b.map(bay);
   let g = Infinity;
-  for (const p of a) for (const q of b) g = Math.min(g, Math.hypot(p[0] - q[0], p[1] - q[1]));
+  a.forEach((p, i) => b.forEach((q, j) => { g = Math.min(g, bay.gap(p, q, ba[i], bb[j], ra, rb)); }));
   return g;
+}
+
+/**
+ * Rack bays: the straight run from each site to its entry point on the
+ * lane, one rack wide. A robot only turns on the lane (it squares up at the
+ * entry point, then drives straight in or out), so inside a bay it is a
+ * square aligned with the bay, its rack included, and not the circle its
+ * turning sweeps. Two robots in neighbouring bays are as far apart as the
+ * racks are; bounding circles would make neighbouring slots exclude each
+ * other. Returns p => bay index or -1, with
+ *   gap(p, q, i, j, rp, rq): centre distance equivalent for robots at p
+ *     (bay i) and q (bay j), to compare with rp + rq + CLEARANCE;
+ *     Infinity for neighbouring bays.
+ */
+export function bayIndex(lanes, sites) {
+  const bays = [];
+  for (const s of sites || []) {
+    const f = approachFoot(lanes, s);
+    const L = f ? dist2(s, f) : 0;
+    if (L > 0.2) bays.push({ s, ux: (f.x - s.x) / L, uy: (f.y - s.y) / L, end: L - 0.1 });
+  }
+  const at = (p) => {
+    for (let i = 0; i < bays.length; i++) {
+      const b = bays[i], dx = p[0] - b.s.x, dy = p[1] - b.s.y;
+      const t = dx * b.ux + dy * b.uy, n = Math.abs(dy * b.ux - dx * b.uy);
+      if (t >= -RACK_SIDE / 2 && t <= b.end && n <= RACK_SIDE / 2) return i;
+    }
+    return -1;
+  };
+  const apart = (i, j) => dist2(bays[i].s, bays[j].s) >= RACK_SIDE + 0.1;
+  // Distance from q to the square (half side h) at p aligned with bay i.
+  const toSquare = (i, p, q, h) => {
+    const b = bays[i], dx = q[0] - p[0], dy = q[1] - p[1];
+    const along = Math.abs(dx * b.ux + dy * b.uy), across = Math.abs(dy * b.ux - dx * b.uy);
+    return Math.hypot(Math.max(0, along - h), Math.max(0, across - h));
+  };
+  // A bounding radius r is a square of half side 0.75 r (0.56 m with a rack,
+  // 0.36 m without: both cover the real footprint).
+  at.gap = (p, q, i, j, rp, rq) => {
+    if (i >= 0 && j >= 0 && i !== j && apart(i, j)) return Infinity;
+    if (i >= 0 && j < 0) return toSquare(i, p, q, 0.75 * rp) + rp;
+    if (j >= 0 && i < 0) return toSquare(j, q, p, 0.75 * rq) + rq;
+    return Math.hypot(p[0] - q[0], p[1] - q[1]);
+  };
+  return at;
 }
 
 /** Higher goes first: operator priority, carrying, first to start driving. */
@@ -91,7 +148,7 @@ function outranks(a, b) {
  * pairs between ticks. Returns { conflicts, events }.
  */
 export function createTrafficMemory() {
-  return { flipped: new Map(), retreats: new Map(), breakers: new Map(), failed: new Map() };
+  return { flipped: new Map(), retreats: new Map(), breakers: new Map(), failed: new Map(), noRetreat: new Map() };
 }
 
 const dist2 = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
@@ -182,7 +239,8 @@ export function planRetreat(lanes, lo, hi, reach, bots, sites = []) {
       pts.push(p);
       if (dist2(p, hi.pose) > reach + 0.3 && gap(route, [[p.x, p.y]]) > reach + 0.1) return { path: pts, spur: true };
     }
-    return { path: [...pts, { x: site.x, y: site.y }], spur: true };
+    // Already at the end of its spur: there is nowhere to back off to.
+    return d < 0.3 ? null : { path: [...pts, { x: site.x, y: site.y }], spur: true };
   }
   const others = bots.filter((b) => b !== lo && b !== hi);
   const blockedAt = (p) => dist2(p, hi.pose) < reach || others.some((o) => dist2(p, o.pose) < reach);
@@ -234,6 +292,7 @@ export function planRetreat(lanes, lo, hi, reach, bots, sites = []) {
 
 export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], sites = []) {
   const events = [];
+  const bay = lanes.length ? bayIndex(lanes, sites) : null;
   for (const b of bots) {
     b.claim = claimOf(b.pose, b.plan, b.mission);
     b.movingSince = isDriving(b.mission) ? (b.movingSince || now) : null;
@@ -255,8 +314,17 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
     if (!lo || !hi) { mem.retreats.delete(pair); continue; }
     const reach = radiusOf(lo.mission) + radiusOf(hi.mission) + CLEARANCE;
     const ahead = [[hi.pose.x, hi.pose.y], ...planAhead(hi)];
-    const inTheWay = isDriving(hi.mission) && gap(ahead, [rt.from, [lo.pose.x, lo.pose.y]]) < reach;
-    if (inTheWay) {
+    const inTheWay = isDriving(hi.mission) && gap(ahead, [rt.from, [lo.pose.x, lo.pose.y]], bay, radiusOf(hi.mission), radiusOf(lo.mission)) < reach;
+    // Backed off and the other still can't get past: the back-off didn't
+    // help. Drop it (no new one for this pair for a while) so the deadlock
+    // breaker below decides instead.
+    const futile = !hi.hold && now - rt.at > 2 * STUCK_AFTER && stuck(lo, rt.at) && stuck(hi, rt.at);
+    if (futile) {
+      mem.retreats.delete(pair);
+      mem.noRetreat.set(pair, now + 20);
+      if (lo.hold) lo.hold.retreat = null;
+      events.push({ robot: lo.key, tone: "warn", text: `Backing off didn't let ${hi.label} past ${lo.label}; trying the other way round.` });
+    } else if (inTheWay) {
       handled.add(pair);
       seen.add(pair);
       wants.set(lo.key, { winner: hi, reason: `backing off for ${hi.label}`, retreat: rt });
@@ -271,24 +339,24 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
       const a = bots[i], b = bots[j];
       if (a.map !== b.map) continue;
       const reach = radiusOf(a.mission) + radiusOf(b.mission) + CLEARANCE;
-      const g = gap(a.claim, b.claim);
+      const g = gap(a.claim, b.claim, bay, radiusOf(a.mission), radiusOf(b.mission));
       if (g >= reach) continue;
       const da = isDriving(a.mission), db = isDriving(b.mission);
       if (!da && !db) continue;
       if (handled.has([a.key, b.key].sort().join("|"))) continue;
       if (da && db) {
         let [lo, hi] = outranks(a, b) ? [b, a] : [a, b];
-        let reason = gap(lo.claim.slice(0, 1), hi.claim.slice(0, 1)) >= reach ? "paths cross" : "too close";
+        let reason = gap(lo.claim.slice(0, 1), hi.claim.slice(0, 1), bay, radiusOf(lo.mission), radiusOf(hi.mission)) >= reach ? "paths cross" : "too close";
         let kind = "yield";
         const pair = [a.key, b.key].sort().join("|");
         seen.add(pair);
         // l's body stands in w's path.
-        const blocks = (w, l) => gap(w.claim.slice(1), [[l.pose.x, l.pose.y]]) < reach;
+        const blocks = (w, l) => gap(w.claim.slice(1), [[l.pose.x, l.pose.y]], bay, radiusOf(w.mission), radiusOf(l.mission)) < reach;
         const aInWay = blocks(b, a), bInWay = blocks(a, b);
         if (aInWay !== bInWay) {
           [lo, hi] = aInWay ? [b, a] : [a, b];
           reason = `${hi.label} is in its way`;
-        } else if (aInWay && bInWay && lanes.length) {
+        } else if (aInWay && bInWay && lanes.length && !((mem.noRetreat.get(pair) || 0) > now)) {
           // Head-on: the lower-ranked robot backs off along the lane.
           // Whichever of the two has the shorter way out backs off (ties: the lower-ranked).
           let plan = planRetreat(lanes, lo, hi, reach, bots, sites);
@@ -296,7 +364,7 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
           if (other && (!plan || other.path.length < plan.path.length)) { [lo, hi] = [hi, lo]; plan = other; }
           if (plan) {
             const rt = { loser: lo.key, winner: hi.key, path: plan.path, into: plan.into || null,
-              id: `${pair}@${now.toFixed(1)}`, from: [lo.pose.x, lo.pose.y] };
+              id: `${pair}@${now.toFixed(1)}`, from: [lo.pose.x, lo.pose.y], at: now };
             mem.retreats.set(pair, rt);
             const where = plan.into
               ? `into ${plan.into.name} (${plan.into.state === "occupied" ? "under the rack" : "free slot"})`
@@ -308,8 +376,11 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
             continue;
           }
         }
+        // Right of way it doesn't use passes on: it stands still, blocked by
+        // lo, or unheld and blocked by anything else its costmap sees, while
+        // lo's own way is clear of it.
         let flip = mem.flipped.get(pair);
-        if (!flip && blocks(hi, lo) && stuck(hi, hi.movingSince || 0)) {
+        if (!flip && stuck(hi, hi.movingSince || 0) && (blocks(hi, lo) || (!hi.hold && !blocks(lo, hi)))) {
           flip = { since: now, winner: lo.key };
           mem.flipped.set(pair, flip);
           events.push({ robot: lo.key, tone: "warn", text: `${hi.label} is blocked by ${lo.label}; ${lo.label} goes first to clear the way.` });
@@ -318,13 +389,16 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
           if (flip.winner === lo.key) [lo, hi] = [hi, lo];
           goNow.add(hi.key);
           reason = "clearing the way";
-          if (now - flip.since > 2 * STUCK_AFTER && stuck(hi, flip.since) && blocks(hi, lo)) {
+          if (now - flip.since > 2 * STUCK_AFTER && stuck(hi, flip.since) && (blocks(hi, lo) || stuck(lo, flip.since))) {
             kind = "deadlock";
             reason = "block each other";
             if (!flip.reported) {
               flip.reported = true;
               events.push({ robot: hi.key, tone: "fault", text: `${hi.label} and ${lo.label} block each other. Drive one aside from its console.` });
             }
+            // Never settle on a stand-off: right of way keeps swapping until
+            // one of them gets moving (or the operator steps in).
+            if (now - flip.since > 4 * STUCK_AFTER) mem.flipped.set(pair, { since: now, winner: lo.key, reported: true });
           }
         }
         // A loop breaker keeps right of way over everyone for a few seconds.
@@ -342,6 +416,7 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
     }
   }
   for (const key of mem.flipped.keys()) if (!seen.has(key)) mem.flipped.delete(key);
+  for (const [key, until] of mem.noRetreat) if (until <= now) mem.noRetreat.delete(key);
   // Hold loops: follow who-waits-for-whom; a closed chain lets one robot go.
   const byKey = new Map(bots.map((b) => [b.key, b]));
   const waitsOn = new Map([...wants].map(([k, w]) => [k, w.winner.key]));
@@ -359,7 +434,7 @@ export function trafficTick(bots, now, mem = createTrafficMemory(), lanes = [], 
     const cand = loop.filter((c) => !wants.get(c).retreat && (mem.failed.get(c) || 0) <= now);
     const pool = cand.filter((c) => {
       const r = byKey.get(c);
-      return bots.every((o) => o === r || gap(r.claim.slice(1), [[o.pose.x, o.pose.y]]) >= radiusOf(r.mission) + radiusOf(o.mission) + CLEARANCE);
+      return bots.every((o) => o === r || gap(r.claim.slice(1), [[o.pose.x, o.pose.y]], bay, radiusOf(r.mission), radiusOf(o.mission)) >= radiusOf(r.mission) + radiusOf(o.mission) + CLEARANCE);
     });
     if (!pool.length) continue;
     const go = pool.reduce((a, b) => (outranks(byKey.get(b), byKey.get(a)) ? b : a));

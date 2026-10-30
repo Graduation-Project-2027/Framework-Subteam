@@ -9,7 +9,7 @@ import { loadBundledMap, cloneGrid, touch, planPath, gridToPGM, gridFromPGM, cel
 import { lanePath, nearestLanePoint, DEFAULT_RADIUS } from "./lanes";
 import { PREVIEW_LOCATIONS } from "./previewFixture";
 import { DEFAULT_STATE } from "./mission";
-import { trafficTick, createTrafficMemory, approachFoot, radiusOf, isDriving } from "./traffic";
+import { trafficTick, createTrafficMemory, approachFoot, radiusOf, isDriving, bayIndex } from "./traffic";
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const now = () => Date.now() / 1000;
@@ -814,6 +814,7 @@ export class FleetPreview {
         return r;
       });
       const sites = [...this.layout.racks, ...this.layout.drop_zones];
+      this.bay = (this.layout.lanes || []).length ? bayIndex(this.layout.lanes, sites) : null;
       const { conflicts, events } = trafficTick(bots, t, this.trafficMem, this.layout.lanes || [], sites);
       this.conflicts = conflicts;
       for (const e of events) {
@@ -905,15 +906,28 @@ export class FleetPreview {
     const pose = s.robot_pose, path = ex.path, turn = 2.2;
     // Its own costmap: don't drive (or turn) into another robot; stop and wait.
     if (ex.wp < path.length) {
-      const tgt = path[ex.wp];
-      const dd = Math.hypot(tgt.x - pose.x, tgt.y - pose.y) || 1;
-      const ahead = { x: pose.x + ((tgt.x - pose.x) / dd) * 0.35, y: pose.y + ((tgt.y - pose.y) / dd) * 0.35 };
+      // The spot 0.35 m ahead along the path (around corners, never past them).
+      let ahead = { x: pose.x, y: pose.y }, left = 0.35;
+      for (let k = ex.wp; k < path.length && left > 0; k++) {
+        const d = Math.hypot(path[k].x - ahead.x, path[k].y - ahead.y);
+        if (d <= left) { ahead = { x: path[k].x, y: path[k].y }; left -= d; continue; }
+        ahead = { x: ahead.x + ((path[k].x - ahead.x) / d) * left, y: ahead.y + ((path[k].y - ahead.y) / d) * left };
+        left = 0;
+      }
+      const bay = this.bay, A = [ahead.x, ahead.y], P = [pose.x, pose.y];
       const inWay = this.fleet().some((o) => {
         if (o === r) return false;
-        const q = o.state.robot_pose;
-        const now = Math.hypot(q.x - pose.x, q.y - pose.y);
-        const next = Math.hypot(q.x - ahead.x, q.y - ahead.y);
-        return next < this.contact(r, o) && next < now;
+        const q = o.state.robot_pose, Q = [q.x, q.y];
+        // Free space between the two; in a rack bay a robot is the square it
+        // is there (robots in neighbouring bays never touch).
+        const d = (p) => {
+          const i = bay ? bay(p) : -1, j = bay ? bay(Q) : -1;
+          if (i < 0 && j < 0) return Math.hypot(q.x - p[0], q.y - p[1]) - this.contact(r, o);
+          const rr = radiusOf(r.state), ro = radiusOf(o.state);
+          return bay.gap(p, Q, i, j, rr, ro) - rr - ro - 0.05;
+        };
+        const now = d(P), next = d(A);
+        return next < 0 && next < now;
       });
       if (inWay) { r.blockedSince = r.blockedSince || now(); return; }
     }

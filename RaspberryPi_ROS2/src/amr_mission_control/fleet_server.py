@@ -91,6 +91,7 @@ STUCK_AFTER = 4.0          # s the robot with right of way may stand still befor
 BREAK_FOR = 6.0            # s a hold-loop breaker keeps right of way
 ROBOT_R = math.hypot(0.35, 0.32)       # bounding radius, empty
 CARRY_R = math.hypot(0.525, 0.525)     # bounding radius, carrying a rack
+RACK_SIDE = 0.95                       # rack footprint (square), as the GUI draws it
 TRAVEL_STEPS = {"navigating", "navigating_to_rack", "navigating_to_dest", ""}
 TRAVEL_STATES = {"RUNNING", "NAVIGATING", "RETURNING"}
 
@@ -103,6 +104,7 @@ _flipped = {}              # robot pair -> {"since", "winner", "reported"} (dead
 _retreats = {}             # robot pair -> back-off record (head-on on a lane)
 _breakers = {}             # robot -> {"until", "from"}: hold-loop right of way
 _breaker_failed = {}       # robot -> until: was given right of way and did not move
+_no_retreat = {}           # robot pair -> until: a back-off didn't help, don't plan another
 _layout = {"rev": 0, "map": None, "lanes": [], "racks": [], "drop_zones": [],
            "lane_corner_radius": 0.6, "sync": True, "source": None, "updated": None}
 _library_cache = {"at": 0.0, "maps": []}
@@ -537,8 +539,63 @@ def _claim(r):
     return pts
 
 
-def _gap(a_pts, b_pts):
-    return min(math.hypot(p[0] - q[0], p[1] - q[1]) for p in a_pts for q in b_pts)
+def _gap(a_pts, b_pts, bay=None, ra=0.0, rb=0.0):
+    """Closest distance between two point sets, as robot centres: compared
+    with ra + rb + CLEARANCE. With `bay` (_Bays) and the two bounding radii,
+    a robot in a rack bay counts as the square it is there, not its circle."""
+    if bay is None:
+        return min(math.hypot(p[0] - q[0], p[1] - q[1]) for p in a_pts for q in b_pts)
+    ba, bb = [bay(p) for p in a_pts], [bay(q) for q in b_pts]
+    return min(bay.gap(p, q, i, j, ra, rb) for p, i in zip(a_pts, ba) for q, j in zip(b_pts, bb))
+
+
+class _Bays:
+    """Rack bays (mirrors gui/src/lib/traffic.js bayIndex): the straight run
+    from each site to its entry point, one rack wide. A robot only turns on
+    the lane (it squares up at the entry point, then drives straight in or
+    out), so inside a bay it is a square aligned with the bay, rack included,
+    not the circle its turning sweeps. Robots in neighbouring bays are as far
+    apart as the racks are; bounding circles would make neighbouring slots
+    exclude each other."""
+
+    def __init__(self, lanes, sites):
+        self.bays = []
+        for s in sites:
+            f = _approach_foot(lanes, s)
+            L = math.hypot(f[0] - s["x"], f[1] - s["y"]) if f else 0.0
+            if L > 0.2:
+                self.bays.append((s, (f[0] - s["x"]) / L, (f[1] - s["y"]) / L, L - 0.1))
+
+    def __call__(self, p):
+        for i, (s, ux, uy, end) in enumerate(self.bays):
+            dx, dy = p[0] - s["x"], p[1] - s["y"]
+            t, n = dx * ux + dy * uy, abs(dy * ux - dx * uy)
+            if -RACK_SIDE / 2 <= t <= end and n <= RACK_SIDE / 2:
+                return i
+        return -1
+
+    def apart(self, i, j):
+        a, b = self.bays[i][0], self.bays[j][0]
+        return math.hypot(a["x"] - b["x"], a["y"] - b["y"]) >= RACK_SIDE + 0.1
+
+    def _to_square(self, i, p, q, h):
+        _, ux, uy, _ = self.bays[i]
+        dx, dy = q[0] - p[0], q[1] - p[1]
+        along, across = abs(dx * ux + dy * uy), abs(dy * ux - dx * uy)
+        return math.hypot(max(0.0, along - h), max(0.0, across - h))
+
+    def gap(self, p, q, i, j, rp, rq):
+        """Centre distance equivalent for robots at p (bay i) and q (bay j),
+        to compare with rp + rq + CLEARANCE; inf for neighbouring bays. A
+        bounding radius r is a square of half side 0.75 r (covers the real
+        footprint with and without a rack)."""
+        if i >= 0 and j >= 0 and i != j and self.apart(i, j):
+            return math.inf
+        if i >= 0 > j:
+            return self._to_square(i, p, q, 0.75 * rp) + rp
+        if j >= 0 > i:
+            return self._to_square(j, q, p, 0.75 * rq) + rq
+        return math.hypot(p[0] - q[0], p[1] - q[1])
 
 
 def _map_of(r):
@@ -656,6 +713,8 @@ def _plan_retreat(lanes, lo, hi, reach, bots, sites):
             if dist0(p, hp) > reach + 0.3 and _gap(route, [p]) > reach + 0.1:
                 return {"path": pts, "into": None, "spur": True}
             t += 0.1
+        if d < 0.3:  # already at the end of its spur: nowhere to back off to
+            return None
         return {"path": pts + [(site["x"], site["y"])], "into": None, "spur": True}
     others = [_pose(b) for b in bots if b is not lo and b is not hi]
     dist = lambda p, q: math.hypot(p[0] - q[0], p[1] - q[1])
@@ -747,6 +806,7 @@ def _traffic_tick():
         handled = set()
         lanes = _layout["lanes"] if _layout["rev"] else []
         sites = _layout["racks"] + _layout["drop_zones"]
+        bay = _Bays(lanes, sites) if lanes else None
         # Robots backing off stay held until the robot they made way for no
         # longer drives past the spot they left (or past them).
         for pair, rt in list(_retreats.items()):
@@ -757,7 +817,17 @@ def _traffic_tick():
             reach = _radius(lo) + _radius(hi) + CLEARANCE
             hp, lp = _pose(hi), _pose(lo)
             ahead = [(hp[0], hp[1])] + _ahead(hi)
-            if _driving(hi) and _gap(ahead, [rt["from"], (lp[0], lp[1])]) < reach:
+            # Backed off and the other still can't get past: the back-off
+            # didn't help. Drop it (no new one for this pair for a while) so
+            # the deadlock breaker decides instead.
+            if not hi.hold and now - rt["at"] > 2 * STUCK_AFTER and stuck(lo, rt["at"]) and stuck(hi, rt["at"]):
+                del _retreats[pair]
+                _no_retreat[pair] = now + 20
+                if lo.hold:
+                    lo.hold["retreat"] = None
+                event(f"Backing off didn't let {hi.label} past {lo.label}; trying the other way round.",
+                      lo.machine, "warn")
+            elif _driving(hi) and _gap(ahead, [rt["from"], (lp[0], lp[1])], bay, _radius(hi), _radius(lo)) < reach:
                 handled.add(pair)
                 seen.add(pair)
                 wants[lo.machine] = (hi, f"backing off for {hi.label}", rt)
@@ -772,7 +842,7 @@ def _traffic_tick():
                 if _map_of(a) != _map_of(b):
                     continue
                 reach = _radius(a) + _radius(b) + CLEARANCE
-                gap = _gap(a.claim, b.claim)
+                gap = _gap(a.claim, b.claim, bay, _radius(a), _radius(b))
                 if gap >= reach:
                     continue
                 da, db = _driving(a), _driving(b)
@@ -782,14 +852,14 @@ def _traffic_tick():
                     continue
                 if da and db:
                     lo, hi = (a, b) if _rank(a) < _rank(b) else (b, a)
-                    reason = "paths cross" if _gap(lo.claim[:1], hi.claim[:1]) >= reach else "too close"
+                    reason = "paths cross" if _gap(lo.claim[:1], hi.claim[:1], bay, _radius(lo), _radius(hi)) >= reach else "too close"
                     kind = "yield"
                     pair = tuple(sorted((a.machine, b.machine)))
                     seen.add(pair)
 
                     def blocks(w, l, reach=reach):  # l's body stands in w's path
                         lp = _pose(l)
-                        return len(w.claim) > 1 and _gap(w.claim[1:], [(lp[0], lp[1])]) < reach
+                        return len(w.claim) > 1 and _gap(w.claim[1:], [(lp[0], lp[1])], bay, _radius(w), _radius(l)) < reach
 
                     # In the way goes first: exactly one robot stands in the
                     # other's path (follower behind leader, robot waiting on a
@@ -800,7 +870,7 @@ def _traffic_tick():
                     if a_in_way != b_in_way:
                         lo, hi = (b, a) if a_in_way else (a, b)
                         reason = f"{hi.label} is in its way"
-                    elif a_in_way and b_in_way and lanes:
+                    elif a_in_way and b_in_way and lanes and _no_retreat.get(pair, 0) <= now:
                         # Head-on: the lower-ranked robot backs off along the lane.
                         # Whichever of the two has the shorter way out backs off
                         # (ties: the lower-ranked one).
@@ -812,7 +882,7 @@ def _traffic_tick():
                             lp = _pose(lo)
                             rt = {"loser": lo.machine, "winner": hi.machine, "path": plan["path"],
                                   "into": plan["into"], "id": f"{pair[0]}|{pair[1]}@{now:.1f}",
-                                  "from": (lp[0], lp[1])}
+                                  "from": (lp[0], lp[1]), "at": now}
                             _retreats[pair] = rt
                             where = (f"into {plan['into'].get('name', 'a site')}"
                                      f" ({'under the rack' if plan['into'].get('state') == 'occupied' else 'free slot'})"
@@ -825,8 +895,12 @@ def _traffic_tick():
                             continue
 
                     # Deadlock breaker: right of way that goes nowhere flips.
+                    # Right of way it doesn't use passes on: it stands still,
+                    # blocked by lo, or unheld and blocked by anything else its
+                    # costmap sees, while lo's own way is clear of it.
                     flip = _flipped.get(pair)
-                    if not flip and blocks(hi, lo) and stuck(hi, hi.moving_since or 0.0):
+                    if not flip and stuck(hi, hi.moving_since or 0.0) and (
+                            blocks(hi, lo) or (not hi.hold and not blocks(lo, hi))):
                         flip = _flipped[pair] = {"since": now, "winner": lo.machine, "reported": False}
                         event(f"{hi.label} is blocked by {lo.label}; {lo.label} goes first to clear the way.",
                               lo.machine, "warn")
@@ -835,12 +909,17 @@ def _traffic_tick():
                             lo, hi = hi, lo
                         go_now.add(hi.machine)
                         reason = "clearing the way"
-                        if now - flip["since"] > 2 * STUCK_AFTER and stuck(hi, flip["since"]) and blocks(hi, lo):
+                        if now - flip["since"] > 2 * STUCK_AFTER and stuck(hi, flip["since"]) and (
+                                blocks(hi, lo) or stuck(lo, flip["since"])):
                             kind, reason = "deadlock", "block each other"
                             if not flip["reported"]:
                                 flip["reported"] = True
                                 event(f"{hi.label} and {lo.label} block each other. Drive one aside from its console.",
                                       hi.machine, "fault")
+                            # Never settle on a stand-off: right of way keeps
+                            # swapping until one gets moving (or the operator steps in).
+                            if now - flip["since"] > 4 * STUCK_AFTER:
+                                _flipped[pair] = {"since": now, "winner": lo.machine, "reported": True}
                     # A hold-loop breaker keeps right of way for a few seconds.
                     breaking = lambda r: _breakers.get(r.machine, {}).get("until", 0) > now
                     if breaking(lo) and not breaking(hi) and not stuck(lo, _breakers[lo.machine]["at"]):
@@ -862,6 +941,8 @@ def _traffic_tick():
                                       "gap": round(gap, 2)})
         for pair in [k for k in _flipped if k not in seen]:
             del _flipped[pair]
+        for pair in [k for k, t in _no_retreat.items() if t <= now]:
+            del _no_retreat[pair]
         # Hold loops (A waits for B, B for C, C for A) never resolve pair by
         # pair: one robot in the loop gets right of way for BREAK_FOR, the
         # highest-ranked whose path is not physically blocked.
@@ -884,7 +965,7 @@ def _traffic_tick():
                 # the one it waited for, or it gets right of way and can't use it.
                 r = _robots[c]
                 return len(r.claim) < 2 or all(
-                    _gap(r.claim[1:], [_pose(o)[:2]]) >= _radius(r) + _radius(o) + CLEARANCE
+                    _gap(r.claim[1:], [_pose(o)[:2]], bay, _radius(r), _radius(o)) >= _radius(r) + _radius(o) + CLEARANCE
                     for o in bots if o is not r)
             cand = [c for c in cand if _breaker_failed.get(c, 0) <= now]
             pool = [c for c in cand if unblocked(c)]
